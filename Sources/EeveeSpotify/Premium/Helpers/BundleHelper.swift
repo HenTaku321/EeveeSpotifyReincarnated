@@ -48,6 +48,38 @@ class BundleHelper {
         }
         return nil
     }
+
+    var shareEditorDirectoryURL: URL? {
+        guard let directory = bundle?.resourceURL?.appendingPathComponent("ShareEditor", isDirectory: true),
+              FileManager.default.fileExists(atPath: directory.path) else {
+            return nil
+        }
+        return directory
+    }
+
+    var shareEditorIndexURL: URL? {
+        guard let index = shareEditorDirectoryURL?.appendingPathComponent("index.html", isDirectory: false),
+              FileManager.default.fileExists(atPath: index.path) else {
+            return nil
+        }
+        return index
+    }
+
+    var timelineEditorDirectoryURL: URL? {
+        guard let directory = bundle?.resourceURL?.appendingPathComponent("TimelineEditor", isDirectory: true),
+              FileManager.default.fileExists(atPath: directory.path) else {
+            return nil
+        }
+        return directory
+    }
+
+    var timelineEditorIndexURL: URL? {
+        guard let index = timelineEditorDirectoryURL?.appendingPathComponent("index.html", isDirectory: false),
+              FileManager.default.fileExists(atPath: index.path) else {
+            return nil
+        }
+        return index
+    }
     
     func localizedString(_ key: String) -> String {
         guard let bundle = self.bundle else { return key }

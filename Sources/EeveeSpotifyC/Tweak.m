@@ -5,9 +5,16 @@
 
 void EeveeSBInvokeSeekDouble(id target, SEL selector, double argument) {
     if (!target || !selector) return;
-    typedef id (*SeekFn)(id, SEL, double);
+    typedef void (*SeekFn)(id, SEL, double);
     SeekFn fn = (SeekFn)objc_msgSend;
-    (void)fn(target, selector, argument);
+    fn(target, selector, argument);
+}
+
+void EeveeInvokeBool(id target, SEL selector, BOOL argument) {
+    if (!target || !selector) return;
+    typedef void (*BoolFn)(id, SEL, BOOL);
+    BoolFn fn = (BoolFn)objc_msgSend;
+    fn(target, selector, argument);
 }
 
 static void writeDebugLog(NSString *message) {

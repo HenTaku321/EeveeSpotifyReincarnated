@@ -76,6 +76,32 @@ struct EeveeSettingsView: View {
                     imageSystemName: "quote.bubble.fill"
                 )
             }
+
+            Button {
+                pushSettingsController(
+                    with: EeveeShareEditorSettingsView(navigationController: navigationController),
+                    title: "lyrics_share_editor".localized
+                )
+            } label: {
+                NavigationSectionView(
+                    color: .green,
+                    title: "lyrics_share_editor".localized,
+                    imageSystemName: "square.and.pencil"
+                )
+            }
+
+            Button {
+                pushSettingsController(
+                    with: EeveeTimelineEditorSettingsView(navigationController: navigationController),
+                    title: "lyrics_timeline_editor".localized
+                )
+            } label: {
+                NavigationSectionView(
+                    color: Color(hex: "#63DD8C"),
+                    title: "lyrics_timeline_editor".localized,
+                    imageSystemName: "waveform"
+                )
+            }
             
             Button {
                 pushSettingsController(

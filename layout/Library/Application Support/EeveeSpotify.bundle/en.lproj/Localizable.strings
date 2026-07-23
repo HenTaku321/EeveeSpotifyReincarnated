@@ -2,6 +2,8 @@
 
 patching = "Patching";
 lyrics = "Lyrics";
+lyrics_share_editor = "Lyrics Editor";
+lyrics_timeline_editor = "Lyrics Timeline Editor";
 customization = "Customization";
 experiments = "Experiments";
 sponsorblock = "SponsorBlock (BETA)";

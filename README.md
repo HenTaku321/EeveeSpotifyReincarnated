@@ -43,6 +43,65 @@ This tweak makes Spotify think you have a Premium subscription, granting free li
   </ol>
 </details>
 
+## Build the Share Editor rootless package
+
+The `Build Share Editor rootless package` workflow builds the current branch on a
+`macos-15` runner with Xcode 16.2, compiles the renamed `EeveeSwiftProtobuf`
+framework, and produces a rootless `.deb` plus a TrollFools-compatible ZIP. The
+workflow also unpacks the package before uploading it and verifies the Eevee
+dylib, framework, `ShareEditor`, and `TimelineEditor` resources are present.
+
+1. Push the public source changes to a branch in your fork. The workflow file
+   `.github/workflows/build-share-editor.yml` must also exist on the fork's
+   default branch before GitHub exposes its `workflow_dispatch` form; merge or
+   copy the workflow there first, then use `ref` for the source branch.
+2. Run **Actions → Build Share Editor rootless package** and set `ref` to that branch.
+   After the workflow exists on the default branch, the CLI equivalent for the
+   example branch is
+   `gh workflow run build-share-editor.yml --repo OWNER/FORK --ref share-editor-work -f ref=share-editor-work`.
+   The CLI `--ref` selects the workflow definition, while `-f ref=...` supplies
+   the source ref checked out by this workflow.
+3. Leave `ipa_url` empty to build the package artifacts without uploading or
+   modifying an IPA. The workflow publishes these independent artifacts:
+   - `eevee-share-editor-rootless-deb` contains the rootless `.deb` and build metadata.
+   - `eevee-share-editor-trollfools-zip` contains a ZIP whose top level is exactly
+     `EeveeSpotify.dylib`, `EeveeSwiftProtobuf.framework`, and
+     `EeveeSpotify.bundle`.
+4. For TrollFools v4.3, download the `eevee-share-editor-trollfools-zip`
+   Actions artifact and extract that outer artifact archive first. Import the
+   contained `EeveeSpotify-share-editor-trollfools.zip` into TrollFools, not the
+   outer ZIP downloaded from GitHub Actions. Do not give TrollFools the `.deb`:
+   its `.deb` extractor only selects dylib/bundle payloads and omits
+   `EeveeSwiftProtobuf.framework`, while its ZIP preprocessing accepts `.dylib`,
+   `.framework`, and `.bundle` together.
+5. To build a complete IPA instead, download the `.deb`, then splice it into a
+   locally held IPA without modifying the original:
+
+   ```sh
+   Tools/splice-deb-into-ipa.sh \
+     /path/to/Spotify-9.1.60-debug.ipa \
+     /path/to/com.eevee.spotify_6.6.6_iphoneos-arm64.deb \
+     /path/to/Spotify-9.1.60-share-editor.ipa
+   ```
+
+   The script validates all three Eevee payloads, preserves the original main
+   executable entitlements, signs the replacement Mach-O files with `ldid`, and
+   runs `zip -T`. It builds in a same-directory temporary path and atomically
+   replaces the requested output only after all checks pass, so a failed splice
+   preserves any existing output IPA. This is a TrollStore/AppSync ad-hoc splice;
+   ordinary certificate sideloaders must re-sign the complete app bundle. The
+   Spotify IPA is never needed by the default Actions job.
+
+The optional splice job accepts an external direct-download `ipa_url` only when
+it is an absolute HTTPS URL without embedded credentials and the matching
+`ipa_sha256` (64 hexadecimal characters) is supplied. The IPA stays
+in the runner's temporary directory and is uploaded only as the short-lived
+`eevee-share-editor-ipa` artifact; it must not be committed to this repository.
+Do not put credentials in the URL. No repository secret is required for the
+`.deb` job. Workflow inputs are stored with the run and are not secret fields, so
+do not place access tokens in the URL or its query string; use a local build or an
+independently secured download channel for a private IPA source.
+
 ## The History
 
 In January 2024, Spotilife, the only tweak to get Spotify Premium, stopped working on new Spotify versions. [whoeevee](https://github.com/whoeevee) decompiled Spotilife, reverse-engineered Spotify, intercepted requests, etc., and created this tweak.
@@ -115,7 +174,3 @@ Thanks for all of the community's support, also, thanks to all the devs who work
    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=jaydenjcpy/EeveeSpotifyReincarnated&type=date&legend=top-left" />
  </picture>
 </a>
-
-
-
-

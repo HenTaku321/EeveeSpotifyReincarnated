@@ -45,6 +45,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
                 currentTitle = track.trackTitle()
                 currentArtist = track.artistName()
                 hasMetadata = true
+                if capturedTrackId != trackId { capturedAlbumName = nil }
                 capturedTrackId = trackId
                 capturedTrackTitle = currentTitle
                 capturedArtistName = currentArtist
@@ -69,6 +70,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
             currentTitle = title
             currentArtist = artist
             hasMetadata = true
+            if capturedTrackId != trackId { capturedAlbumName = nil }
             capturedTrackId = trackId
             capturedTrackTitle = title
             capturedArtistName = artist
@@ -81,6 +83,7 @@ private func loadCustomLyricsForTrackId(_ trackId: String) throws -> Lyrics {
             currentTitle = info.title
             currentArtist = info.artist
             hasMetadata = true
+            if capturedTrackId != trackId { capturedAlbumName = nil }
             capturedTrackId = trackId
             capturedTrackTitle = currentTitle
             capturedArtistName = currentArtist
@@ -393,6 +396,7 @@ func getLyricsDataForCurrentTrack(_ originalPath: String, originalLyrics: Lyrics
     if capturedTrackId != trackIdentifier {
         capturedTrackTitle = nil
         capturedArtistName = nil
+        capturedAlbumName = nil
         capturedTrackId = nil
     }
 

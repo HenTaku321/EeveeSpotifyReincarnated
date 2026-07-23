@@ -2,6 +2,8 @@
 
 patching = "补丁";
 lyrics = "歌词";
+lyrics_share_editor = "歌词编辑器";
+lyrics_timeline_editor = "歌词内容与时间轴";
 customization = "定制";
 experiments = "实验";
 

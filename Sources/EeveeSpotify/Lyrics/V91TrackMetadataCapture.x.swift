@@ -5,6 +5,7 @@ import MediaPlayer
 // Global variables to store captured track metadata for 9.1.6
 var capturedTrackTitle: String?
 var capturedArtistName: String?
+var capturedAlbumName: String?
 var capturedTrackId: String?
 
 // Function to fetch track details using Spotify API if we have a token

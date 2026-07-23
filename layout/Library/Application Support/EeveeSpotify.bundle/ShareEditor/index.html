@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#111513">
+  <title>歌词编辑器</title>
+  <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app" id="share-editor-app">
+    <header class="app-bar">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div>
+          <h1>歌词编辑器</h1>
+          <p id="document-source">GitHub Lyrics</p>
+        </div>
+      </div>
+
+      <div class="history-tools" role="group" aria-label="编辑历史">
+        <button class="icon-button" id="undo-button" type="button" title="撤销" aria-label="撤销">↶</button>
+        <button class="icon-button" id="redo-button" type="button" title="重做" aria-label="重做">↷</button>
+      </div>
+
+      <div class="app-actions">
+        <button class="secondary-button" id="load-button" type="button">载入歌词</button>
+        <button class="secondary-button" id="project-menu-button" type="button">保存项目</button>
+        <label class="secondary-button file-label" for="project-input">打开项目</label>
+        <input id="project-input" type="file" accept="application/json,.json" hidden>
+      </div>
+    </header>
+
+    <nav class="mobile-workspace-tabs" role="tablist" aria-label="编辑工作区">
+      <button type="button" class="is-active" role="tab" aria-selected="true" data-mobile-view="lyrics">歌词</button>
+      <button type="button" role="tab" aria-selected="false" data-mobile-view="style">样式</button>
+      <button type="button" role="tab" aria-selected="false" data-mobile-view="media">图像</button>
+      <button type="button" role="tab" aria-selected="false" data-mobile-view="stickers">贴纸</button>
+      <button type="button" role="tab" aria-selected="false" data-mobile-view="preview">预览</button>
+    </nav>
+
+    <main class="editor-grid" data-mobile-view="lyrics">
+      <section class="lyrics-panel" aria-labelledby="lyrics-heading">
+        <div class="panel-heading">
+          <div>
+            <h2 id="lyrics-heading">歌词</h2>
+            <p id="selection-status">已选择 0 行</p>
+          </div>
+          <span class="limit-badge" id="selection-limit">0 / 6</span>
+        </div>
+        <div class="lyrics-list" id="lyrics-list"></div>
+      </section>
+
+      <section class="preview-panel" aria-labelledby="preview-heading">
+        <div class="preview-heading">
+          <div class="track-heading">
+            <h2 id="preview-heading">预览</h2>
+            <p id="track-summary">未载入曲目</p>
+          </div>
+          <output class="status-output" id="status-output" aria-live="polite"></output>
+        </div>
+        <div class="canvas-stage" id="canvas-stage">
+          <canvas id="preview-canvas" width="891" height="891" aria-label="歌词卡片预览"></canvas>
+        </div>
+        <div class="export-bar">
+          <span class="export-size">PNG · 891 × 891</span>
+          <div class="export-actions">
+            <button class="secondary-button" id="download-button" type="button">保存 PNG</button>
+            <button class="primary-button" id="share-button" type="button">系统分享</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="inspector" aria-label="编辑工具">
+        <div class="tool-tabs" role="tablist" aria-label="编辑工具">
+          <button class="tool-tab is-active" id="tab-style" type="button" role="tab" aria-selected="true" aria-controls="panel-style" data-panel="style">样式</button>
+          <button class="tool-tab" id="tab-media" type="button" role="tab" aria-selected="false" aria-controls="panel-media" data-panel="media">图像</button>
+          <button class="tool-tab" id="tab-stickers" type="button" role="tab" aria-selected="false" aria-controls="panel-stickers" data-panel="stickers">贴纸</button>
+        </div>
+
+        <section class="tool-panel is-active" id="panel-style" role="tabpanel" aria-labelledby="tab-style">
+          <fieldset>
+            <legend>配色</legend>
+            <div class="swatch-row" id="color-presets">
+              <button type="button" class="color-swatch is-selected" data-background="#498cb7" data-text="#05090e" style="--swatch:#498cb7" title="湖蓝" aria-label="湖蓝配色"></button>
+              <button type="button" class="color-swatch" data-background="#f1d44b" data-text="#17150d" style="--swatch:#f1d44b" title="明黄" aria-label="明黄配色"></button>
+              <button type="button" class="color-swatch" data-background="#e96f58" data-text="#1d100d" style="--swatch:#e96f58" title="珊瑚" aria-label="珊瑚配色"></button>
+              <button type="button" class="color-swatch" data-background="#1f2a25" data-text="#f5f7f5" style="--swatch:#1f2a25" title="深绿" aria-label="深绿配色"></button>
+              <button type="button" class="color-swatch" data-background="#f4f5f2" data-text="#121513" style="--swatch:#f4f5f2" title="白色" aria-label="白色配色"></button>
+            </div>
+            <div class="color-inputs">
+              <label>背景<input id="background-color" type="color" value="#498cb7"></label>
+              <label>文字<input id="text-color" type="color" value="#05090e"></label>
+              <label>遮罩<input id="tint-color" type="color" value="#000000"></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>字体</legend>
+            <div class="segmented-control font-control" data-control="fontType">
+              <button type="button" class="is-selected font-classic" data-value="classic">Classic</button>
+              <button type="button" class="font-wide" data-value="wide">Wide</button>
+              <button type="button" class="font-narrow" data-value="narrow">Narrow</button>
+              <button type="button" class="font-slanted" data-value="slanted">Slanted</button>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>排版</legend>
+            <div class="segmented-control" data-control="textAlignment">
+              <button type="button" class="is-selected" data-value="leading">靠前</button>
+              <button type="button" data-value="center">居中</button>
+              <button type="button" data-value="trailing">靠后</button>
+            </div>
+            <label class="toggle-row">
+              <span>全部大写</span>
+              <input id="caps-toggle" type="checkbox" role="switch">
+            </label>
+          </fieldset>
+        </section>
+
+        <section class="tool-panel" id="panel-media" role="tabpanel" aria-labelledby="tab-media" hidden>
+          <fieldset>
+            <legend>背景图</legend>
+            <label class="file-drop" for="background-input">
+              <span class="file-drop-icon" aria-hidden="true">▧</span>
+              <span id="background-file-name">选择本地图片</span>
+            </label>
+            <input id="background-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+            <button class="danger-button" id="remove-background" type="button" disabled>移除背景</button>
+          </fieldset>
+
+          <fieldset>
+            <legend>专辑封面</legend>
+            <label class="file-drop compact" for="cover-input">
+              <span class="file-drop-icon" aria-hidden="true">◩</span>
+              <span id="cover-file-name">选择本地封面</span>
+            </label>
+            <input id="cover-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+            <button class="danger-button" id="remove-cover" type="button" disabled>恢复曲目封面</button>
+          </fieldset>
+        </section>
+
+        <section class="tool-panel" id="panel-stickers" role="tabpanel" aria-labelledby="tab-stickers" hidden>
+          <fieldset>
+            <legend>添加贴纸</legend>
+            <div class="sticker-palette" id="sticker-palette">
+              <button type="button" data-glyph="✦" data-color="#f1d44b" title="星光贴纸" aria-label="添加星光贴纸">✦</button>
+              <button type="button" data-glyph="♥" data-color="#e96f58" title="爱心贴纸" aria-label="添加爱心贴纸">♥</button>
+              <button type="button" data-glyph="♪" data-color="#a7f3c8" title="音符贴纸" aria-label="添加音符贴纸">♪</button>
+            </div>
+            <label class="file-drop compact" for="sticker-input">
+              <span class="file-drop-icon" aria-hidden="true">＋</span>
+              <span>本地贴纸</span>
+            </label>
+            <input id="sticker-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+          </fieldset>
+          <fieldset>
+            <legend>当前贴纸</legend>
+            <div class="sticker-summary" id="sticker-summary">未选择贴纸</div>
+            <button class="danger-button" id="delete-sticker" type="button" disabled>删除贴纸</button>
+          </fieldset>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <dialog id="source-dialog" aria-labelledby="source-dialog-title">
+    <form method="dialog" id="source-form">
+      <div class="dialog-heading">
+        <div>
+          <h2 id="source-dialog-title">载入 GitHub 歌词</h2>
+          <p>Track identity</p>
+        </div>
+        <button class="icon-button" type="button" id="close-source-dialog" title="关闭" aria-label="关闭">×</button>
+      </div>
+      <div class="source-fields">
+        <label>Track ID<input name="trackId" autocomplete="off" required></label>
+        <label>歌曲名<input name="title" autocomplete="off" required></label>
+        <label>艺术家<input name="artist" autocomplete="off" required></label>
+        <label>专辑<input name="album" autocomplete="off" required></label>
+        <label class="span-two">访问令牌<input name="token" type="password" autocomplete="off"></label>
+      </div>
+      <div class="dialog-actions">
+        <button class="secondary-button" type="button" id="cancel-source-dialog">取消</button>
+        <button class="primary-button" type="submit">载入</button>
+      </div>
+    </form>
+  </dialog>
+
+  <canvas id="export-canvas" width="891" height="891" hidden></canvas>
+  <script src="./editor-state.js"></script>
+  <script src="./renderer.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
