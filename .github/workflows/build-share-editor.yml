@@ -1,0 +1,271 @@
+name: Build Share Editor rootless package
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Source branch or tag containing the Share Editor changes"
+        required: true
+        default: "share-editor-work"
+        type: string
+      ipa_url:
+        description: "Optional direct URL to a user-provided decrypted IPA; leave empty for .deb only"
+        required: false
+        default: ""
+        type: string
+      ipa_sha256:
+        description: "Required with ipa_url: SHA-256 of the external IPA (64 hex characters)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  THEOS: ${{ github.workspace }}/theos
+  SWIFTPROTOBUF_VERSION: "1.29.0"
+
+jobs:
+  build-deb:
+    name: Build and verify rootless .deb and TrollFools ZIP
+    runs-on: macos-15
+    steps:
+      - name: Checkout Share Editor source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.2.0"
+
+      - name: Checkout Theos
+        uses: actions/checkout@v4
+        with:
+          repository: theos/theos
+          path: ${{ github.workspace }}/theos
+          submodules: recursive
+
+      - name: Install package tools
+        run: |
+          brew install make dpkg ldid zip
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - name: Record toolchain
+        run: |
+          xcodebuild -version | tee "$RUNNER_TEMP/xcode-version.txt"
+          swift --version | tee "$RUNNER_TEMP/swift-version.txt"
+          make --version | sed -n '1p'
+
+      - name: Verify editor sources and embedded assets
+        run: ./Tools/verify-share-editor.sh
+
+      - name: Build renamed SwiftProtobuf framework
+        run: |
+          chmod +x Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
+          make build-eeveeswiftprotobuf
+          test -x "$THEOS/lib/iphone/rootless/EeveeSwiftProtobuf.framework/EeveeSwiftProtobuf"
+          lipo -info "$THEOS/lib/iphone/rootless/EeveeSwiftProtobuf.framework/EeveeSwiftProtobuf"
+
+      - name: Build rootless package
+        env:
+          REPO_SLUG: ${{ github.repository }}
+          BRANCH_NAME: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$BRANCH_NAME" =~ ^[A-Za-z0-9._/-]+$ ]] && [[ "$BRANCH_NAME" != *..* ]] || {
+            echo "ref contains characters that are unsafe for the generated build configuration" >&2
+            exit 1
+          }
+          make clean
+          THEOS_PACKAGE_SCHEME=rootless make package FINALPACKAGE=1
+          DEB_PATH="$(find packages -maxdepth 1 -type f -name '*.deb' -print | sort | tail -n 1)"
+          test -n "$DEB_PATH"
+          echo "DEB_PATH=$DEB_PATH" >> "$GITHUB_ENV"
+
+      - name: Verify package contents and stage artifacts
+        env:
+          BRANCH_NAME: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          test -n "${DEB_PATH:-}"
+          rm -rf "$RUNNER_TEMP/deb-root" "$RUNNER_TEMP/trollfools-root"
+          mkdir -p "$RUNNER_TEMP/deb-root" "$RUNNER_TEMP/trollfools-root" Outputs/DEBS Outputs/TROLLFOOLS
+          dpkg-deb -x "$DEB_PATH" "$RUNNER_TEMP/deb-root"
+
+          find_one() {
+            find "$RUNNER_TEMP/deb-root" -type f -name "$1" -print -quit
+          }
+          DYLIB="$(find_one EeveeSpotify.dylib)"
+          FRAMEWORK="$RUNNER_TEMP/deb-root/var/jb/Library/Frameworks/EeveeSwiftProtobuf.framework/EeveeSwiftProtobuf"
+          BUNDLE="$RUNNER_TEMP/deb-root/var/jb/Library/Application Support/EeveeSpotify.bundle"
+          test -n "$DYLIB"
+          test -x "$FRAMEWORK"
+          test -f "$BUNDLE/ShareEditor/index.html"
+          test -f "$BUNDLE/ShareEditor/app.js"
+          test -f "$BUNDLE/TimelineEditor/index.html"
+          test -f "$BUNDLE/TimelineEditor/app.js"
+
+          TROLLFOOLS_ROOT="$RUNNER_TEMP/trollfools-root"
+          cp -f "$DYLIB" "$TROLLFOOLS_ROOT/EeveeSpotify.dylib"
+          cp -R "$(dirname "$FRAMEWORK")" \
+            "$TROLLFOOLS_ROOT/EeveeSwiftProtobuf.framework"
+          cp -R "$BUNDLE" "$TROLLFOOLS_ROOT/EeveeSpotify.bundle"
+          TROLLFOOLS_ZIP="$GITHUB_WORKSPACE/Outputs/TROLLFOOLS/EeveeSpotify-share-editor-trollfools.zip"
+          (cd "$TROLLFOOLS_ROOT" && zip -qry "$TROLLFOOLS_ZIP" .)
+          zip -T "$TROLLFOOLS_ZIP"
+          python3 - "$TROLLFOOLS_ZIP" <<'PY'
+          import pathlib
+          import sys
+          import zipfile
+
+          archive = pathlib.Path(sys.argv[1])
+          expected_top_level = {
+              "EeveeSpotify.dylib",
+              "EeveeSwiftProtobuf.framework",
+              "EeveeSpotify.bundle",
+          }
+          required_files = {
+              "EeveeSpotify.dylib",
+              "EeveeSwiftProtobuf.framework/EeveeSwiftProtobuf",
+              "EeveeSpotify.bundle/ShareEditor/index.html",
+              "EeveeSpotify.bundle/ShareEditor/app.js",
+              "EeveeSpotify.bundle/TimelineEditor/index.html",
+              "EeveeSpotify.bundle/TimelineEditor/app.js",
+          }
+          with zipfile.ZipFile(archive) as package:
+              names = {item.filename for item in package.infolist() if not item.is_dir()}
+          if not names:
+              raise SystemExit("TrollFools ZIP is empty")
+          for name in names:
+              parts = pathlib.PurePosixPath(name).parts
+              if not parts or name.startswith("/") or ".." in parts:
+                  raise SystemExit(f"unsafe TrollFools ZIP path: {name}")
+          top_level = {pathlib.PurePosixPath(name).parts[0] for name in names}
+          if top_level != expected_top_level:
+              raise SystemExit(f"unexpected TrollFools ZIP top level: {sorted(top_level)}")
+          missing = sorted(required_files - names)
+          if missing:
+              raise SystemExit(f"missing TrollFools payload files: {missing}")
+          PY
+
+          ARTIFACT="Outputs/DEBS/$(basename "$DEB_PATH")"
+          cp -f "$DEB_PATH" "$ARTIFACT"
+          {
+            printf 'git=%s\n' "$(git rev-parse HEAD)"
+            printf 'ref=%s\n' "$BRANCH_NAME"
+            xcodebuild -version
+            swift --version
+            shasum -a 256 "$ARTIFACT"
+            dpkg-deb --info "$ARTIFACT"
+          } > Outputs/DEBS/build-metadata.txt
+
+      - name: Upload rootless package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eevee-share-editor-rootless-deb
+          path: |
+            Outputs/DEBS/*.deb
+            Outputs/DEBS/build-metadata.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload TrollFools package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eevee-share-editor-trollfools-zip
+          path: Outputs/TROLLFOOLS/EeveeSpotify-share-editor-trollfools.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  splice-ipa:
+    name: Optional IPA splice from external input
+    needs: build-deb
+    if: ${{ inputs.ipa_url != '' }}
+    runs-on: macos-15
+    steps:
+      - name: Checkout Share Editor source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 1
+
+      - name: Download rootless package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: eevee-share-editor-rootless-deb
+          path: Outputs/DEBS
+
+      - name: Install IPA splice tools
+        run: |
+          brew install dpkg ldid unzip zip
+          python3 -m pip install --upgrade --break-system-packages \
+            git+https://github.com/asdfzxcvbn/pyzule-rw.git
+          cyan --help >/dev/null
+
+      - name: Download and verify external IPA
+        env:
+          IPA_URL: ${{ inputs.ipa_url }}
+          IPA_SHA256: ${{ inputs.ipa_sha256 }}
+        run: |
+          set -euo pipefail
+          python3 - "$IPA_URL" <<'PY'
+          import sys
+          from urllib.parse import urlparse
+
+          parsed = urlparse(sys.argv[1])
+          if parsed.scheme != "https" or not parsed.netloc:
+              raise SystemExit("ipa_url must be an absolute HTTPS URL")
+          if parsed.username is not None or parsed.password is not None:
+              raise SystemExit("ipa_url must not contain URL credentials")
+          PY
+          [[ "$IPA_SHA256" =~ ^[[:xdigit:]]{64}$ ]] || {
+            echo "ipa_sha256 must be supplied with exactly 64 hexadecimal characters" >&2
+            exit 1
+          }
+          IPA="$RUNNER_TEMP/spotify-input.ipa"
+          curl --fail --location --retry 3 --silent --show-error \
+            --proto '=https' --proto-redir '=https' \
+            --output "$IPA" "$IPA_URL"
+          printf '%s  %s\n' "$IPA_SHA256" "$IPA" | shasum -a 256 -c -
+          unzip -tqq "$IPA"
+          unzip -Z1 "$IPA" | awk '/^Payload\/[^/]*\.app\// { found=1 } END { exit(found ? 0 : 1) }'
+          echo "IPA=$IPA" >> "$GITHUB_ENV"
+
+      - name: Inject the rootless package into external IPA
+        run: |
+          set -euo pipefail
+          DEB="$(find Outputs/DEBS -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          test -n "$DEB"
+          rm -rf "$RUNNER_TEMP/deb-root"
+          mkdir -p "$RUNNER_TEMP/deb-root" Outputs/IPAS
+          dpkg-deb -x "$DEB" "$RUNNER_TEMP/deb-root"
+          DYLIB="$(find "$RUNNER_TEMP/deb-root" -type f -name EeveeSpotify.dylib -print -quit)"
+          FRAMEWORK="$RUNNER_TEMP/deb-root/var/jb/Library/Frameworks/EeveeSwiftProtobuf.framework"
+          BUNDLE="$RUNNER_TEMP/deb-root/var/jb/Library/Application Support/EeveeSpotify.bundle"
+          test -n "$DYLIB"
+          test -f "$FRAMEWORK/EeveeSwiftProtobuf"
+          test -f "$BUNDLE/ShareEditor/index.html"
+          SPOTIFY_VERSION="$(unzip -p "$IPA" 'Payload/Spotify.app/Info.plist' | plutil -extract CFBundleShortVersionString raw 2>/dev/null || printf unknown)"
+          SAFE_VERSION="$(printf '%s' "$SPOTIFY_VERSION" | LC_ALL=C tr -c 'A-Za-z0-9._-' '_')"
+          SAFE_VERSION="$(printf '%.64s' "$SAFE_VERSION")"
+          SAFE_VERSION="${SAFE_VERSION:-unknown}"
+          OUT="Outputs/IPAS/EeveeSpotify-share-editor-${SAFE_VERSION}.ipa"
+          cyan -i "$IPA" -o "$OUT" -f "$DYLIB" "$FRAMEWORK" "$BUNDLE" -c 9 -m 15.0 -du
+          zip -T "$OUT"
+          unzip -Z1 "$OUT" | grep -E '/EeveeSpotify\.dylib$' >/dev/null
+          unzip -Z1 "$OUT" | grep -E '/EeveeSwiftProtobuf\.framework/EeveeSwiftProtobuf$' >/dev/null
+          unzip -Z1 "$OUT" | grep -E '/EeveeSpotify\.bundle/ShareEditor/index\.html$' >/dev/null
+          unzip -Z1 "$OUT" | grep -E '/EeveeSpotify\.bundle/TimelineEditor/index\.html$' >/dev/null
+
+      - name: Upload optional IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: eevee-share-editor-ipa
+          path: Outputs/IPAS/*.ipa
+          if-no-files-found: error
+          retention-days: 3
