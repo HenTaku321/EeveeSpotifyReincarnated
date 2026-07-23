@@ -180,7 +180,7 @@ final class LyricsTimelinePlayerBridge {
     }
 
     private func returnType(_ method: Method) -> String {
-        guard let raw = method_copyReturnType(method) else { return "" }
+        let raw = method_copyReturnType(method)
         defer { free(raw) }
         return String(cString: raw)
     }
