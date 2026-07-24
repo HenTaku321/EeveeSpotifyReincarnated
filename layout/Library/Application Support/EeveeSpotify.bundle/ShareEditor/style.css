@@ -38,7 +38,8 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
   letter-spacing: 0;
 }
@@ -47,6 +48,7 @@ button,
 .file-label,
 .file-drop {
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 button {
@@ -226,7 +228,8 @@ button:disabled {
   overflow: hidden;
 }
 
-.mobile-workspace-tabs {
+.mobile-tool-dock,
+.mobile-project-button {
   display: none;
 }
 
@@ -705,15 +708,47 @@ dialog::backdrop {
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-width: 932px) and (max-height: 520px) {
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body,
+  button,
+  input,
+  textarea,
+  select,
+  .file-label,
+  .file-drop {
+    touch-action: manipulation;
+  }
+
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
+  .line-editor {
+    font-size: 16px;
+  }
+
   .app {
-    display: block;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
   }
 
   .app-bar {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
     position: relative;
+    padding-bottom: 8px;
   }
 
   .history-tools {
@@ -721,11 +756,27 @@ dialog::backdrop {
     grid-row: 1;
   }
 
+  .mobile-project-button {
+    display: inline-flex;
+  }
+
   .app-actions {
-    grid-column: 1 / -1;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: max(10px, env(safe-area-inset-right));
+    z-index: 20;
+    display: none;
+    width: min(250px, calc(100vw - 20px));
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #171c19;
+    box-shadow: 0 14px 38px rgb(0 0 0 / 0.5);
+  }
+
+  .app-actions.is-open {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    width: 100%;
+    grid-template-columns: 1fr;
   }
 
   .app-actions > * {
@@ -733,83 +784,116 @@ dialog::backdrop {
     min-width: 0;
     padding-right: 7px;
     padding-left: 7px;
-    font-size: 12px;
+    font-size: 14px;
   }
 
   .editor-grid {
-    display: block;
-    overflow: visible;
+    grid-row: 2;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+    overflow: hidden;
   }
 
-  .mobile-workspace-tabs {
-    position: sticky;
-    top: 0;
-    z-index: 5;
+  .mobile-tool-dock {
+    grid-row: 3;
+    z-index: 8;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    padding: 7px max(9px, env(safe-area-inset-right)) 7px max(9px, env(safe-area-inset-left));
-    border-bottom: 1px solid var(--border);
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    padding: 6px max(6px, env(safe-area-inset-right)) max(6px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left));
+    border-top: 1px solid var(--border);
     background: #111513;
   }
 
-  .mobile-workspace-tabs button {
+  .mobile-tool-dock button {
     min-width: 0;
-    height: 38px;
-    padding: 0 4px;
-    border: 1px solid var(--border);
-    border-right: 0;
-    background: #0e120f;
+    min-height: 50px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 2px;
+    padding: 3px 1px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
     color: var(--muted);
     cursor: pointer;
   }
 
-  .mobile-workspace-tabs button:first-child {
-    border-radius: 6px 0 0 6px;
+  .mobile-tool-dock button > span {
+    min-height: 22px;
+    display: grid;
+    place-items: center;
+    color: var(--ink);
+    font-size: 20px;
+    line-height: 1;
   }
 
-  .mobile-workspace-tabs button:last-child {
-    border-right: 1px solid var(--border);
-    border-radius: 0 6px 6px 0;
+  .mobile-tool-dock button > .type-icon {
+    font-size: 15px;
+    font-weight: 750;
   }
 
-  .mobile-workspace-tabs button.is-active {
+  .mobile-tool-dock button > small {
+    font-size: 10px;
+    line-height: 1.1;
+  }
+
+  .mobile-tool-dock button.is-active {
     background: #29372f;
-    border-color: #52665a;
     color: var(--ink);
   }
 
+  .mobile-tool-dock button.is-active > span {
+    color: var(--accent);
+  }
+
+  .editor-grid > .preview-panel {
+    display: contents;
+  }
+
   .editor-grid > .lyrics-panel,
-  .editor-grid > .preview-panel,
   .editor-grid > .inspector {
     display: none;
   }
 
-  .editor-grid[data-mobile-view="lyrics"] > .lyrics-panel {
+  .editor-grid[data-mobile-tool="lyrics"] > .lyrics-panel {
+    grid-row: 3;
     display: grid;
   }
 
-  .editor-grid[data-mobile-view="preview"] > .preview-panel {
-    display: grid;
-  }
-
-  .editor-grid[data-mobile-view="style"] > .inspector,
-  .editor-grid[data-mobile-view="media"] > .inspector,
-  .editor-grid[data-mobile-view="stickers"] > .inspector {
+  .editor-grid[data-mobile-tool="type"] > .inspector,
+  .editor-grid[data-mobile-tool="layout"] > .inspector,
+  .editor-grid[data-mobile-tool="media"] > .inspector,
+  .editor-grid[data-mobile-tool="stickers"] > .inspector {
+    grid-row: 3;
     display: block;
   }
 
-  .preview-panel {
-    min-height: calc(100svh - 150px - env(safe-area-inset-top));
+  .preview-heading {
+    grid-row: 1;
+    min-height: 48px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    background: #0b0e0c;
   }
 
   .lyrics-panel {
-    min-height: calc(100svh - 150px - env(safe-area-inset-top));
+    min-height: 0;
     border-top: 0;
     border-right: 0;
+    overflow: hidden;
   }
 
   .inspector {
-    min-height: calc(100svh - 150px - env(safe-area-inset-top));
+    min-height: 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
   }
 
   .lyrics-list {
@@ -821,22 +905,41 @@ dialog::backdrop {
   }
 
   .canvas-stage {
+    grid-row: 2;
+    inline-size: 100%;
+    max-inline-size: 100vw;
     min-height: 0;
-    padding: 14px max(14px, env(safe-area-inset-right)) 14px max(14px, env(safe-area-inset-left));
+    padding: 10px max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left));
+    background: #0b0e0c;
   }
 
   #preview-canvas {
-    width: 100%;
+    width: calc(100vw - 24px);
+    inline-size: calc(100vw - 24px);
     min-width: 0;
-    max-width: 520px;
+    min-inline-size: 0;
+    max-width: calc(100vw - 24px);
+    max-inline-size: min(100%, calc(100vw - 24px), 520px);
   }
 
   .export-bar {
+    grid-row: 3;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     padding-right: max(12px, env(safe-area-inset-right));
     padding-bottom: max(12px, env(safe-area-inset-bottom));
     padding-left: max(12px, env(safe-area-inset-left));
+  }
+
+  .editor-grid:not([data-mobile-tool="export"]) .export-bar {
+    display: none;
+  }
+
+  .editor-grid[data-mobile-tool="export"] .export-bar {
+    display: grid;
   }
 
   .export-actions {
@@ -855,12 +958,51 @@ dialog::backdrop {
     grid-template-columns: 1fr;
   }
 
+  .editor-grid[data-mobile-tool] .inspector fieldset {
+    display: none;
+  }
+
+  .editor-grid[data-mobile-tool="type"] .inspector fieldset[data-mobile-tool="type"],
+  .editor-grid[data-mobile-tool="layout"] .inspector fieldset[data-mobile-tool="layout"],
+  .editor-grid[data-mobile-tool="media"] .inspector fieldset[data-mobile-tool="media"],
+  .editor-grid[data-mobile-tool="stickers"] .inspector fieldset[data-mobile-tool="stickers"] {
+    display: block;
+  }
+
   .source-fields {
     grid-template-columns: 1fr;
   }
 
   .source-fields .span-two {
     grid-column: auto;
+  }
+}
+
+@media (max-width: 932px) and (max-height: 520px) {
+  .app-bar {
+    min-height: 48px;
+    padding-top: max(6px, env(safe-area-inset-top));
+    padding-bottom: 6px;
+  }
+
+  .brand-mark,
+  .brand-block p {
+    display: none;
+  }
+
+  .preview-heading {
+    min-height: 42px;
+  }
+
+  #preview-canvas {
+    width: max(96px, calc(100vh - 245px));
+    inline-size: max(96px, calc(100vh - 245px));
+    max-width: calc(100vw - 24px);
+    max-inline-size: min(100%, calc(100vw - 24px), 520px);
+  }
+
+  .mobile-tool-dock button {
+    min-height: 44px;
   }
 }
 
@@ -884,7 +1026,8 @@ dialog::backdrop {
   }
 
   .canvas-stage {
-    padding: 12px;
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-left: max(12px, env(safe-area-inset-left));
   }
 
   .status-output {

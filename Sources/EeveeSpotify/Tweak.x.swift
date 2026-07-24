@@ -57,6 +57,7 @@ struct NonIOS14PremiumPatchingGroup: HookGroup { }
 struct IOS14And15PremiumPatchingGroup: HookGroup { }
 struct V91PremiumPatchingGroup: HookGroup { } // For Spotify 9.1.x versions
 struct LatestPremiumPatchingGroup: HookGroup { }
+struct StatefulPlayerCaptureGroup: HookGroup { }
 
 func activatePremiumPatchingGroup() {
     BasePremiumPatchingGroup().activate()
@@ -66,6 +67,7 @@ func activatePremiumPatchingGroup() {
     }
     else if EeveeSpotify.hookTarget == .v91 {
         // 9.1.x versions: Use NonIOS14 hooks but skip offline content hooks
+        activateStatefulPlayerCapture()
         NonIOS14PremiumPatchingGroup().activate()
         // Only activate if Spotify's UIView category method exists in this build —
         // the method was removed/renamed in 9.1.28 and hooking a missing method is a fatal crash.
@@ -75,6 +77,7 @@ func activatePremiumPatchingGroup() {
         }
     }
     else {
+        activateStatefulPlayerCapture()
         NonIOS14PremiumPatchingGroup().activate()
         
         if EeveeSpotify.hookTarget == .lastAvailableiOS15 {
@@ -325,6 +328,8 @@ struct EeveeSpotify: Tweak {
             let lyricsEnabled = UserDefaults.lyricsSource.isReplacingLyrics
 
             // These launchers operate on whichever lyrics source rendered the card, including QX.
+            // Their player bridge needs the Stateful Player even when premium patching is disabled.
+            activateStatefulPlayerCapture()
             activateLyricsEditorEntries()
 
             // Lyrics hooks (guarded)

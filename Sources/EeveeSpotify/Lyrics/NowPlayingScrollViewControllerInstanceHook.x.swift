@@ -1,4 +1,5 @@
 import Orion
+import ObjectiveC.runtime
 import UIKit
 
 var statefulPlayer: StatefulPlayerImplementation?
@@ -19,13 +20,47 @@ class LegacyNowPlayingPlatformSwiftServiceImplementationHook: ClassHook<NSObject
 }
 
 class NowPlayingPlatformSwiftServiceImplementationHook: ClassHook<NSObject> {
-    typealias Group = NonIOS14PremiumPatchingGroup
+    typealias Group = StatefulPlayerCaptureGroup
     static let targetName = "NowPlaying_PlatformImpl.NowPlayingPlatformSwiftServiceImplementation"
     
     func provideStatefulPlayerWithFeatureIdentifier(_ identifier: NSString) -> StatefulPlayerImplementation {
         statefulPlayer = orig.provideStatefulPlayerWithFeatureIdentifier(identifier)
+        writeDebugLog("[LyricsEditor] Stateful Player captured: \(NSStringFromClass(type(of: statefulPlayer! as AnyObject)))")
         return statefulPlayer!
     }
+}
+
+private var statefulPlayerCaptureGroupActivated = false
+
+func activateStatefulPlayerCapture() {
+    guard !statefulPlayerCaptureGroupActivated else { return }
+
+    let className = "NowPlaying_PlatformImpl.NowPlayingPlatformSwiftServiceImplementation"
+    let selector = Selector(("provideStatefulPlayerWithFeatureIdentifier:"))
+    guard let serviceClass = NSClassFromString(className),
+          let method = class_getInstanceMethod(serviceClass, selector),
+          method_getNumberOfArguments(method) == 3,
+          methodReturnType(method) == "@",
+          methodArgumentType(method, index: 2) == "@" else {
+        writeDebugLog("[LyricsEditor] skipped Stateful Player capture: class/selector mismatch")
+        return
+    }
+
+    statefulPlayerCaptureGroupActivated = true
+    StatefulPlayerCaptureGroup().activate()
+    writeDebugLog("[LyricsEditor] Stateful Player capture activated")
+}
+
+private func methodReturnType(_ method: Method) -> String {
+    guard let raw = method_copyReturnType(method) else { return "" }
+    defer { free(raw) }
+    return String(cString: raw)
+}
+
+private func methodArgumentType(_ method: Method, index: UInt32) -> String {
+    guard let raw = method_copyArgumentType(method, index) else { return "" }
+    defer { free(raw) }
+    return String(cString: raw)
 }
 
 class NowPlayingScrollPrivateServiceImplementationHook: ClassHook<NSObject> {

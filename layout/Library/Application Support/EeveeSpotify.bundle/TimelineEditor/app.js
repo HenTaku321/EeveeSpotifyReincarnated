@@ -58,6 +58,10 @@
     $("#cue-word-toggle").textContent = wordMode ? `逐词：${Math.min(completed, tokens.length)}/${tokens.length}` : "逐词：关";
     $("#cue-start").textContent = wordMode ? "打下一个词" : "写入 start";
     $("#cue-end").textContent = wordMode ? "完成本行" : "写入 end";
+    $("#dock-cue-primary").textContent = wordMode ? "打下一个词" : "写入 start";
+    $("#dock-cue-end").textContent = wordMode ? "完成本行" : "写入 end";
+    $("#dock-cue-primary").disabled = !sameTrack;
+    $("#dock-cue-end").disabled = !sameTrack;
   }
 
   function renderCurrent() {
@@ -146,6 +150,9 @@
   }
   function cuePrimary() { if (editorState?.cueWordMode) cueNextWord(); else cueStart(); }
   function moveNext() { if (!editorState) return; editorState.selectedIndex = Math.min(lines().length - 1, editorState.selectedIndex + 1); render(); scheduleDraft(); }
+  function addBefore() { if (editorState) mutate(() => State.addLine(editorState, editorState.selectedIndex)); }
+  function addAfter() { if (editorState) mutate(() => State.addLine(editorState, editorState.selectedIndex + 1)); }
+  function removeCurrent() { if (editorState) mutate(() => State.removeLine(editorState, editorState.selectedIndex)); }
 
   function previewCurrent() {
     const line = currentLine();
@@ -190,10 +197,17 @@
     $("#cue-toggle").addEventListener("click", () => { editorState.cueEnabled = !editorState.cueEnabled; renderTransport(); scheduleDraft(); });
     $("#cue-word-toggle").addEventListener("click", () => { editorState.cueWordMode = !editorState.cueWordMode; renderTransport(); scheduleDraft(); });
     $("#cue-start").addEventListener("click", cuePrimary); $("#cue-end").addEventListener("click", cueEnd); $("#preview-line").addEventListener("click", previewCurrent); $("#next-line").addEventListener("click", moveNext);
-    $("#add-before").addEventListener("click", () => mutate(() => State.addLine(editorState, editorState.selectedIndex)));
-    $("#add-after").addEventListener("click", () => mutate(() => State.addLine(editorState, editorState.selectedIndex + 1)));
-    $("#delete-current").addEventListener("click", () => mutate(() => State.removeLine(editorState, editorState.selectedIndex)));
+    $("#add-before").addEventListener("click", addBefore);
+    $("#add-after").addEventListener("click", addAfter);
+    $("#delete-current").addEventListener("click", removeCurrent);
     $("#save-button").addEventListener("click", save); $("#undo-button").addEventListener("click", undo); $("#redo-button").addEventListener("click", redo);
+    $("#dock-cue-primary").addEventListener("click", cuePrimary);
+    $("#dock-cue-end").addEventListener("click", cueEnd);
+    $("#dock-next-line").addEventListener("click", moveNext);
+    $("#dock-add-before").addEventListener("click", addBefore);
+    $("#dock-add-after").addEventListener("click", addAfter);
+    $("#dock-delete-current").addEventListener("click", removeCurrent);
+    $("#dock-save").addEventListener("click", save);
     document.querySelectorAll(".mobile-workspace-tabs [data-mobile-view]").forEach((button) => {
       button.addEventListener("click", () => activateMobileView(button.dataset.mobileView));
     });

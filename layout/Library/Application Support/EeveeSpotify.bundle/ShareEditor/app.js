@@ -339,7 +339,7 @@
 
     collectElements() {
       const ids = [
-        "document-source", "undo-button", "redo-button", "load-button", "project-menu-button", "project-input",
+        "document-source", "undo-button", "redo-button", "mobile-project-button", "load-button", "project-menu-button", "project-input",
         "selection-status", "selection-limit", "lyrics-list", "track-summary", "status-output", "preview-canvas",
         "export-canvas", "download-button", "share-button", "background-color", "text-color", "tint-color",
         "caps-toggle", "background-input", "background-file-name", "remove-background", "cover-input",
@@ -353,6 +353,16 @@
       const e = this.elements;
       e.undoButton.addEventListener("click", () => this.undo());
       e.redoButton.addEventListener("click", () => this.redo());
+      e.mobileProjectButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const actions = document.querySelector(".app-actions");
+        const open = actions.classList.toggle("is-open");
+        e.mobileProjectButton.setAttribute("aria-expanded", String(open));
+      });
+      document.addEventListener("click", () => {
+        document.querySelector(".app-actions").classList.remove("is-open");
+        e.mobileProjectButton.setAttribute("aria-expanded", "false");
+      });
       e.loadButton.addEventListener("click", () => e.sourceDialog.showModal());
       e.closeSourceDialog.addEventListener("click", () => e.sourceDialog.close());
       e.cancelSourceDialog.addEventListener("click", () => e.sourceDialog.close());
@@ -379,8 +389,8 @@
       document.querySelectorAll(".tool-tab").forEach((button) => {
         button.addEventListener("click", () => this.activateToolPanel(button.dataset.panel));
       });
-      document.querySelectorAll(".mobile-workspace-tabs button[data-mobile-view]").forEach((button) => {
-        button.addEventListener("click", () => this.activateMobileView(button.dataset.mobileView));
+      document.querySelectorAll(".mobile-tool-dock button[data-mobile-tool]").forEach((button) => {
+        button.addEventListener("click", () => this.activateMobileTool(button.dataset.mobileTool));
       });
       document.querySelectorAll(".segmented-control").forEach((control) => {
         control.addEventListener("click", (event) => {
@@ -568,18 +578,17 @@
       });
     }
 
-    activateMobileView(name) {
+    activateMobileTool(name) {
+      if (!["lyrics", "type", "layout", "media", "stickers", "export"].includes(name)) return;
       const editor = document.querySelector(".editor-grid");
-      editor.dataset.mobileView = name;
-      document.querySelectorAll(".mobile-workspace-tabs button[data-mobile-view]").forEach((button) => {
-        const active = button.dataset.mobileView === name;
+      editor.dataset.mobileTool = name;
+      document.querySelectorAll(".mobile-tool-dock button[data-mobile-tool]").forEach((button) => {
+        const active = button.dataset.mobileTool === name;
         button.classList.toggle("is-active", active);
         button.setAttribute("aria-selected", String(active));
       });
-      if (name === "style" || name === "media" || name === "stickers") {
-        this.activateToolPanel(name);
-      }
-      root.scrollTo({ top: document.querySelector(".mobile-workspace-tabs").offsetTop, behavior: "auto" });
+      if (name === "type" || name === "layout") this.activateToolPanel("style");
+      else if (name === "media" || name === "stickers") this.activateToolPanel(name);
     }
 
     setStatus(message, error) {

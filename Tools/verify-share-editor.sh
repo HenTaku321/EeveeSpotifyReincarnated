@@ -139,6 +139,21 @@ grep -Fq 'private func optionalNumber(' "$source_dir/LyricsTimelinePlayerBridge.
 grep -Fq 'let directPlayer = statefulControlPlayer()' "$source_dir/LyricsTimelinePlayerBridge.swift"
 grep -Fq 'let isPlaying = directIsPlaying ?? false' "$source_dir/LyricsTimelinePlayerBridge.swift"
 grep -Fq 'private func statefulControlPlayer() -> AnyObject?' "$source_dir/LyricsTimelinePlayerBridge.swift"
+grep -Fq 'struct StatefulPlayerCaptureGroup: HookGroup' "$repo_dir/Sources/EeveeSpotify/Tweak.x.swift"
+grep -Fq 'typealias Group = StatefulPlayerCaptureGroup' "$repo_dir/Sources/EeveeSpotify/Lyrics/NowPlayingScrollViewControllerInstanceHook.x.swift"
+grep -Fq 'func activateStatefulPlayerCapture()' "$repo_dir/Sources/EeveeSpotify/Lyrics/NowPlayingScrollViewControllerInstanceHook.x.swift"
+grep -Fq 'provideStatefulPlayerWithFeatureIdentifier:' "$repo_dir/Sources/EeveeSpotify/Lyrics/NowPlayingScrollViewControllerInstanceHook.x.swift"
+grep -Fq 'method_getNumberOfArguments(method) == 3' "$repo_dir/Sources/EeveeSpotify/Lyrics/NowPlayingScrollViewControllerInstanceHook.x.swift"
+grep -Fq 'methodReturnType(method) == "@"' "$repo_dir/Sources/EeveeSpotify/Lyrics/NowPlayingScrollViewControllerInstanceHook.x.swift"
+grep -Fq 'methodArgumentType(method, index: 2) == "@"' "$repo_dir/Sources/EeveeSpotify/Lyrics/NowPlayingScrollViewControllerInstanceHook.x.swift"
+grep -Fq 'Stateful Player captured:' "$repo_dir/Sources/EeveeSpotify/Lyrics/NowPlayingScrollViewControllerInstanceHook.x.swift"
+grep -Fq 'activateStatefulPlayerCapture()' "$repo_dir/Sources/EeveeSpotify/Tweak.x.swift"
+if grep -A4 -F 'class NowPlayingPlatformSwiftServiceImplementationHook' \
+    "$repo_dir/Sources/EeveeSpotify/Lyrics/NowPlayingScrollViewControllerInstanceHook.x.swift" | \
+    grep -Fq 'typealias Group = NonIOS14PremiumPatchingGroup'; then
+    echo "modern stateful-player capture must not depend on premium hook activation" >&2
+    exit 1
+fi
 if grep -Eq 'observedIsPlaying|elapsedMs' \
     "$source_dir/LyricsTimelinePlayerBridge.swift"; then
     echo "timeline player must fail closed instead of trusting or extrapolating observer playback state" >&2
@@ -160,12 +175,21 @@ grep -Fq 'bestTranslationAlternative' "$timeline_bundle_dir/editor-state.js"
 grep -Fq 'loadDocument(payload) { editorState = State.createState(payload); history = []; future = []; render(); bridge({ command: "getPlayerState" }); return true; }' "$timeline_bundle_dir/app.js"
 grep -Fq 'class="mobile-workspace-tabs"' "$timeline_bundle_dir/index.html"
 grep -Fq 'function activateMobileView(name)' "$timeline_bundle_dir/app.js"
+grep -Fq 'class="primary-command-dock"' "$timeline_bundle_dir/index.html"
+grep -Fq '$("#dock-cue-primary").addEventListener("click", cuePrimary)' "$timeline_bundle_dir/app.js"
+grep -Fq 'grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;' "$timeline_bundle_dir/style.css"
 grep -Fq 'grid-template-columns: repeat(4, minmax(0, 1fr));' "$timeline_bundle_dir/style.css"
 grep -Fq 'overflow-x: hidden;' "$timeline_bundle_dir/style.css"
+grep -Fq 'maximum-scale=1, user-scalable=no' "$timeline_bundle_dir/index.html"
+grep -Fq 'class="mobile-tool-dock"' "$bundle_dir/index.html"
+grep -Fq 'data-mobile-tool="export"' "$bundle_dir/index.html"
+grep -Fq 'activateMobileTool(name)' "$bundle_dir/app.js"
+grep -Fq 'grid-template-columns: repeat(6, minmax(0, 1fr));' "$bundle_dir/style.css"
+grep -Fq 'inline-size: calc(100vw - 24px);' "$bundle_dir/style.css"
+grep -Fq 'maximum-scale=1, user-scalable=no' "$bundle_dir/index.html"
 grep -Fq 'grid-template-columns: repeat(3, minmax(0, 1fr));' "$bundle_dir/style.css"
 grep -Fq 'env(safe-area-inset-bottom)' "$bundle_dir/style.css"
 grep -Fq 'max-width: 580px;' "$bundle_dir/style.css"
-grep -Fq 'max-width: 520px;' "$bundle_dir/style.css"
 if awk '
     /#preview-canvas[[:space:]]*\{/ { in_canvas = 1 }
     in_canvas && /(dvh|svh)/ { found = 1 }
@@ -193,6 +217,24 @@ grep -Fq 'weak var header: UIView?' "$source_dir/LyricsEditorEntryHooks.x.swift"
 grep -Fq 'var remainingAttempts = 8' "$source_dir/LyricsEditorEntryHooks.x.swift"
 grep -Fq 'CardHeaderView stack unavailable after lifecycle retries' "$source_dir/LyricsEditorEntryHooks.x.swift"
 grep -Fq 'guard header.window != nil else { return }' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'private struct LyricsHeaderButtonStyle' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq '"$__lazy_storage_$_shareButtonContainerView"' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq '"$__lazy_storage_$_expandButtonContainerView"' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq '"$__lazy_storage_$_translationButtonContainerView"' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq '"$__lazy_storage_$_vocalRemovalButtonContainerView"' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'headerButtonStyle(in: header, fallbackStack: stack)' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'stack.arrangedSubviews.compactMap' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'container.subviews.first(where: { $0 is UIButton }) as? UIButton' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'button.apply(headerStyle:' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'card entries attached:' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'preferredSymbolConfigurationForImage(in: .normal)' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'alpha = style.alpha' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'button.sizeToFit()' "$source_dir/LyricsEditorEntryHooks.x.swift"
+if grep -Eq 'equalToConstant: 32|black\.withAlphaComponent\(0\.18\)|pointSize: 15' \
+    "$source_dir/LyricsEditorEntryHooks.x.swift"; then
+    echo "lyrics editor buttons must derive geometry and appearance from Spotify header controls" >&2
+    exit 1
+fi
 grep -Fq 'LyricsEditorCardEntryGroup().activate()' "$source_dir/LyricsEditorEntryHooks.x.swift"
 grep -Fq 'LyricsEditorFullscreenEntryGroup().activate()' "$source_dir/LyricsEditorEntryHooks.x.swift"
 grep -Fq 'LyricsEditorSingalongEntryGroup().activate()' "$source_dir/LyricsEditorEntryHooks.x.swift"
