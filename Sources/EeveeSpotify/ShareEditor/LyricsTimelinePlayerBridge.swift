@@ -35,6 +35,8 @@ final class LyricsTimelinePlayerBridge {
     private var playbackSpeed = 1.0
     private var capturedAt = ProcessInfo.processInfo.systemUptime
     private var seekSelector: Selector?
+    private var capturedTrack: LyricsShareEditorTrackCandidate?
+    private weak var observedPlayer: AnyObject?
 
     private init() {}
 
@@ -43,10 +45,20 @@ final class LyricsTimelinePlayerBridge {
         let durationRaw = number(state, key: "duration")
         let speed = number(state, key: "playbackSpeed")
         let playing = bool(state, key: "isPlaying")
+        let hasStateTrack = safeRead(state, key: "track") != nil
         let resolvedTrackID = resolveTrackID(state: state)
+        let resolvedTrack = resolveTrackCandidate(state: state, trackID: resolvedTrackID)
 
         lock.lock()
-        if !resolvedTrackID.isEmpty { trackId = resolvedTrackID }
+        observedPlayer = player
+        if !resolvedTrackID.isEmpty {
+            trackId = resolvedTrackID
+            capturedTrack = resolvedTrack
+                ?? LyricsShareEditorTrackCandidate(trackId: resolvedTrackID, title: "", artist: "", album: "")
+        } else if hasStateTrack {
+            trackId = ""
+            capturedTrack = nil
+        }
         durationMs = secondsToMilliseconds(durationRaw)
         let normalizedPosition = max(0, secondsToMilliseconds(positionRaw))
         positionMs = durationMs > 0 ? min(normalizedPosition, durationMs) : normalizedPosition
@@ -56,18 +68,30 @@ final class LyricsTimelinePlayerBridge {
         lock.unlock()
     }
 
+    func capturedTrackCandidate() -> LyricsShareEditorTrackCandidate? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !trackId.isEmpty else { return nil }
+        if let capturedTrack = capturedTrack, capturedTrack.trackId == trackId {
+            return capturedTrack
+        }
+        return LyricsShareEditorTrackCandidate(trackId: trackId, title: "", artist: "", album: "")
+    }
+
     func snapshot() -> LyricsTimelinePlayerSnapshot {
         if !Thread.isMainThread {
             return DispatchQueue.main.sync { snapshot() }
         }
         lock.lock()
         let control = controlPlayer()
-        let directPosition = control.map { secondsToMilliseconds(number($0, key: "position")) } ?? 0
-        let directDuration = control.map { secondsToMilliseconds(number($0, key: "duration")) } ?? 0
+        let directPosition = control.flatMap { optionalNumber($0, key: "position") }
+            .map(secondsToMilliseconds)
+        let directDuration = control.flatMap { optionalNumber($0, key: "duration") }
+            .map(secondsToMilliseconds)
         let elapsedMs = isPlaying ? max(0, ProcessInfo.processInfo.systemUptime - capturedAt) * 1000 * playbackSpeed : 0
         let estimatedPosition = max(0, positionMs + Int(elapsedMs.rounded()))
-        let resolvedDuration = control != nil ? directDuration : durationMs
-        let resolvedPosition = control != nil ? directPosition : estimatedPosition
+        let resolvedDuration = directDuration ?? durationMs
+        let resolvedPosition = directPosition ?? estimatedPosition
         let livePosition = resolvedDuration > 0 ? min(resolvedPosition, resolvedDuration) : resolvedPosition
         let liveTrackID = currentTrackID()
         let hasLiveTrack = !liveTrackID.isEmpty
@@ -102,9 +126,12 @@ final class LyricsTimelinePlayerBridge {
         if !Thread.isMainThread {
             return DispatchQueue.main.sync { seek(positionMs: positionMs, expectedTrackID: expectedTrackID) }
         }
-        let liveTrackID = currentTrackID()
-        guard liveTrackID == expectedTrackID else { return false }
         lock.lock()
+        let liveTrackID = currentTrackID()
+        guard liveTrackID == expectedTrackID else {
+            lock.unlock()
+            return false
+        }
         guard let player = controlPlayer(),
               optionalBool(player, key: "disallowSeeking") == false,
               optionalBool(player, key: "disallowSeekingAlways") == false,
@@ -135,9 +162,12 @@ final class LyricsTimelinePlayerBridge {
         if !Thread.isMainThread {
             return DispatchQueue.main.sync { setPaused(paused, expectedTrackID: expectedTrackID) }
         }
-        let liveTrackID = currentTrackID()
-        guard liveTrackID == expectedTrackID else { return false }
         lock.lock()
+        let liveTrackID = currentTrackID()
+        guard liveTrackID == expectedTrackID else {
+            lock.unlock()
+            return false
+        }
         guard let player = controlPlayer(),
               let selector = resolvePausedSelector(on: player) else {
             lock.unlock()
@@ -187,9 +217,13 @@ final class LyricsTimelinePlayerBridge {
 
     private func resolveTrackID(state: AnyObject) -> String {
         let stateTrack = safeRead(state, key: "track") as AnyObject?
+        let trackURI = safeRead(stateTrack, key: "URI") as AnyObject?
         for candidate in [
+            safeRead(trackURI, key: "spt_trackIdentifier") as? String,
             safeRead(stateTrack, key: "trackIdentifier") as? String,
-            safeRead(stateTrack, key: "URI") as? String,
+            safeRead(trackURI, key: "trackIdentifier") as? String,
+            trackURI as? String,
+            trackURI.map { String(describing: $0) },
             safeRead(stateTrack, key: "uri") as? String,
             statefulPlayer?.currentTrack()?.trackIdentifier
         ] {
@@ -205,8 +239,53 @@ final class LyricsTimelinePlayerBridge {
         return ""
     }
 
+    private func resolveTrackCandidate(state: AnyObject, trackID: String) -> LyricsShareEditorTrackCandidate? {
+        guard !trackID.isEmpty,
+              let stateTrack = safeRead(state, key: "track") as AnyObject? else { return nil }
+        let metadata = safeRead(stateTrack, key: "metadata") as? [String: String] ?? [:]
+        return LyricsShareEditorTrackCandidate(
+            trackId: trackID,
+            title: firstNonempty([
+                safeRead(stateTrack, key: "trackTitle") as? String,
+                safeRead(stateTrack, key: "title") as? String,
+                metadataValue(in: metadata, keys: ["title", "track_title", "trackName"])
+            ]) ?? "",
+            artist: firstNonempty([
+                safeRead(stateTrack, key: "artistName") as? String,
+                safeRead(stateTrack, key: "artistTitle") as? String,
+                safeRead(stateTrack, key: "artist") as? String,
+                metadataValue(in: metadata, keys: ["artist", "artist_name", "artistName"])
+            ]) ?? "",
+            album: firstNonempty([
+                safeRead(stateTrack, key: "albumName") as? String,
+                safeRead(stateTrack, key: "albumTitle") as? String,
+                metadataValue(in: metadata, keys: [
+                    "album", "album_name", "album_title", "albumName", "albumTitle", "context_album_name"
+                ])
+            ]) ?? ""
+        )
+    }
+
+    private func firstNonempty(_ values: [String?]) -> String? {
+        values.lazy.compactMap { value in
+            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+                return nil
+            }
+            return value
+        }.first
+    }
+
+    private func metadataValue(in metadata: [String: String], keys: Set<String>) -> String? {
+        let normalizedKeys = Set(keys.map { $0.lowercased() })
+        return metadata.first { normalizedKeys.contains($0.key.lowercased()) }?.value
+    }
+
     private func number(_ object: AnyObject, key: String) -> Double {
         (safeRead(object, key: key) as? NSNumber)?.doubleValue ?? 0
+    }
+
+    private func optionalNumber(_ object: AnyObject, key: String) -> Double? {
+        (safeRead(object, key: key) as? NSNumber)?.doubleValue
     }
 
     private func bool(_ object: AnyObject, key: String) -> Bool {
@@ -225,13 +304,17 @@ final class LyricsTimelinePlayerBridge {
     }
 
     private func controlPlayer() -> AnyObject? {
-        guard let player = statefulPlayer else { return nil }
-        return player as AnyObject
+        if let player = statefulPlayer,
+           isTrackID(player.currentTrack()?.trackIdentifier ?? "") {
+            return player as AnyObject
+        }
+        return observedPlayer
     }
 
     private func currentTrackID() -> String {
         let value = statefulPlayer?.currentTrack()?.trackIdentifier.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return isTrackID(value) ? value : ""
+        if isTrackID(value) { return value }
+        return observedPlayer == nil ? "" : trackId
     }
 
     private func isTrackID(_ value: String) -> Bool {

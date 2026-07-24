@@ -324,6 +324,9 @@ struct EeveeSpotify: Tweak {
 
             let lyricsEnabled = UserDefaults.lyricsSource.isReplacingLyrics
 
+            // These launchers operate on whichever lyrics source rendered the card, including QX.
+            activateLyricsEditorEntries()
+
             // Lyrics hooks (guarded)
             if lyricsEnabled {
                 let fullscreenOK: Bool = {

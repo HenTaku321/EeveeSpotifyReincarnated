@@ -39,16 +39,21 @@
     <section class="modebar" aria-label="同步模式">
       <span class="mode-label">同步模式</span>
       <div class="modes" role="group">
-        <button type="button" data-mode="UNSYNCED">UNSYNCED</button>
-        <button type="button" data-mode="LINE_SYNCED">LINE_SYNCED</button>
-        <button type="button" data-mode="SYLLABLE_SYNCED">SYLLABLE_SYNCED</button>
-        <button type="button" data-mode="AUTO">AUTO</button>
+        <button type="button" data-mode="UNSYNCED"><span class="mode-long">UNSYNCED</span><span class="mode-short">无同步</span></button>
+        <button type="button" data-mode="LINE_SYNCED"><span class="mode-long">LINE_SYNCED</span><span class="mode-short">逐行</span></button>
+        <button type="button" data-mode="SYLLABLE_SYNCED"><span class="mode-long">SYLLABLE_SYNCED</span><span class="mode-short">逐词</span></button>
+        <button type="button" data-mode="AUTO"><span class="mode-long">AUTO</span><span class="mode-short">自动</span></button>
       </div>
       <output id="status" aria-live="polite"></output>
     </section>
 
-    <section class="workspace">
-      <div class="current-panel">
+    <nav class="mobile-workspace-tabs" role="tablist" aria-label="歌词编辑工作区">
+      <button class="is-active" type="button" role="tab" aria-selected="true" aria-controls="current-panel" data-mobile-view="current">当前行</button>
+      <button type="button" role="tab" aria-selected="false" aria-controls="lines-panel" data-mobile-view="lines">整首歌词</button>
+    </nav>
+
+    <section class="workspace" data-mobile-view="current">
+      <div class="current-panel" id="current-panel">
         <div class="panel-heading"><div><span class="eyebrow">CURRENT LINE</span><h2 id="current-index">第 1 行</h2></div><button id="next-line" type="button">下一行 →</button></div>
         <label>原文<textarea id="current-base" rows="3" dir="auto"></textarea></label>
         <label>翻译<textarea id="current-translation" rows="2" dir="auto"></textarea></label>
@@ -56,7 +61,7 @@
         <label class="syllables-label">逐词时间 <textarea id="current-syllables" rows="3" placeholder="例如：1200:第一词\n1650:第二词"></textarea></label>
         <div class="current-actions"><button id="add-before" type="button">前面加行</button><button id="add-after" type="button">后面加行</button><button class="danger" id="delete-current" type="button">删除当前行</button></div>
       </div>
-      <div class="lines-panel">
+      <div class="lines-panel" id="lines-panel">
         <div class="panel-heading"><div><span class="eyebrow">LYRICS</span><h2>整首歌词</h2></div><span class="count" id="line-count">0 行</span></div>
         <div class="lines-list" id="lines-list"></div>
       </div>

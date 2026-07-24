@@ -79,48 +79,46 @@ enum LyricsShareEditorTrackResolver {
         dispatchPrecondition(condition: .onQueue(DispatchQueue.main))
 
         let playerTrack = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack
+        let observedTrack = LyricsTimelinePlayerBridge.shared.capturedTrackCandidate()
         let nowPlaying = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
         let liveTrackID = trimmed(playerTrack?.trackIdentifier)
-        let trackID = liveTrackID ?? trimmed(capturedTrackId)
+        let observedTrackID = trimmed(observedTrack?.trackId)
+        let trackID = liveTrackID ?? observedTrackID ?? trimmed(capturedTrackId)
         guard let trackID = trackID else { throw LyricsShareEditorError.noCurrentTrack }
+        let matchingPlayerTrack = liveTrackID == trackID ? playerTrack : nil
+        let matchingObservedTrack = observedTrackID == trackID ? observedTrack : nil
+        let capturedMetadataMatches = trimmed(capturedTrackId) == trackID
 
         let metadata: [String: String]
-        if let track = playerTrack,
+        if let track = matchingPlayerTrack,
            let object = track as? NSObject,
            object.responds(to: NSSelectorFromString("metadata")) {
             metadata = track.metadata()
         } else {
             metadata = [:]
         }
-        let title: String?
-        let artist: String?
-        let album: String?
-        if liveTrackID != nil {
-            title = firstNonempty([
-                playerTrack.map { $0.trackTitle() },
-                metadataValue(in: metadata, keys: ["title", "track_title", "trackName"]),
-                liveTrackID == capturedTrackId ? capturedTrackTitle : nil
-            ])
-            artist = firstNonempty([
-                playerTrack.map { $0.artistName() },
-                metadataValue(in: metadata, keys: ["artist", "artist_name", "artistName"]),
-                liveTrackID == capturedTrackId ? capturedArtistName : nil
-            ])
-            album = firstNonempty([
-                metadataValue(in: metadata, keys: [
-                    "album", "album_name", "album_title", "albumName", "albumTitle", "context_album_name"
-                ]),
-                liveTrackID == capturedTrackId ? capturedAlbumName : nil,
-                nowPlayingAlbum(in: nowPlaying, matchingTitle: title, artist: artist)
-            ])
-        } else {
-            title = trimmed(capturedTrackTitle)
-            artist = trimmed(capturedArtistName)
-            album = firstNonempty([
-                capturedAlbumName,
-                nowPlayingAlbum(in: nowPlaying, matchingTitle: title, artist: artist)
-            ])
-        }
+        let title = firstNonempty([
+            matchingPlayerTrack.map { $0.trackTitle() },
+            metadataValue(in: metadata, keys: ["title", "track_title", "trackName"]),
+            matchingObservedTrack?.title,
+            capturedMetadataMatches ? capturedTrackTitle : nil,
+            nowPlaying[MPMediaItemPropertyTitle] as? String
+        ])
+        let artist = firstNonempty([
+            matchingPlayerTrack.map { $0.artistName() },
+            metadataValue(in: metadata, keys: ["artist", "artist_name", "artistName"]),
+            matchingObservedTrack?.artist,
+            capturedMetadataMatches ? capturedArtistName : nil,
+            nowPlaying[MPMediaItemPropertyArtist] as? String
+        ])
+        let album = firstNonempty([
+            metadataValue(in: metadata, keys: [
+                "album", "album_name", "album_title", "albumName", "albumTitle", "context_album_name"
+            ]),
+            matchingObservedTrack?.album,
+            capturedMetadataMatches ? capturedAlbumName : nil,
+            nowPlayingAlbum(in: nowPlaying, matchingTitle: title, artist: artist)
+        ])
 
         return LyricsShareEditorTrackCandidate(
             trackId: trackID,

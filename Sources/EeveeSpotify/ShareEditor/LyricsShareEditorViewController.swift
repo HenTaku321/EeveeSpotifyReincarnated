@@ -212,7 +212,11 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
         closeAttemptID = nil
         cancelNetworkAndReleaseWebView()
         if let navigationController = navigationController,
-           navigationController.viewControllers.last === self {
+           navigationController.viewControllers.first === self,
+           navigationController.presentingViewController != nil {
+            navigationController.dismiss(animated: true)
+        } else if let navigationController = navigationController,
+                  navigationController.viewControllers.last === self {
             navigationController.popViewController(animated: true)
         } else {
             dismiss(animated: true)

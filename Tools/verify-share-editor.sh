@@ -128,6 +128,16 @@ grep -Fq 'window.LyricsTimelineEditor.serializeState();' "$source_dir/LyricsTime
 grep -Fq 'removeScriptMessageHandler(forName: "timelineEditor")' "$source_dir/LyricsTimelineEditorViewController.swift"
 grep -Fq 'expectedTrackID' "$source_dir/LyricsTimelinePlayerBridge.swift"
 grep -Fq 'LyricsTimelinePlayerBridge.shared.capture' "$repo_dir/Sources/EeveeSpotify/SponsorBlock/SponsorBlockHooks.x.swift"
+grep -Fq 'func capturedTrackCandidate() -> LyricsShareEditorTrackCandidate?' "$source_dir/LyricsTimelinePlayerBridge.swift"
+grep -Fq 'LyricsTimelinePlayerBridge.shared.capturedTrackCandidate()' "$source_dir/LyricsShareEditorDocument.swift"
+grep -Fq 'safeRead(trackURI, key: "spt_trackIdentifier")' "$source_dir/LyricsTimelinePlayerBridge.swift"
+grep -Fq 'trackURI.map { String(describing: $0) }' "$source_dir/LyricsTimelinePlayerBridge.swift"
+grep -Fq 'private weak var observedPlayer: AnyObject?' "$source_dir/LyricsTimelinePlayerBridge.swift"
+grep -Fq 'return observedPlayer' "$source_dir/LyricsTimelinePlayerBridge.swift"
+grep -Fq 'let resolvedDuration = directDuration ?? durationMs' "$source_dir/LyricsTimelinePlayerBridge.swift"
+grep -Fq 'private func optionalNumber(' "$source_dir/LyricsTimelinePlayerBridge.swift"
+grep -Fq '} else if hasStateTrack {' "$source_dir/LyricsTimelinePlayerBridge.swift"
+grep -Fq 'let matchingPlayerTrack = liveTrackID == trackID ? playerTrack : nil' "$source_dir/LyricsShareEditorDocument.swift"
 grep -Fq 'setIsPaused:' "$source_dir/LyricsTimelinePlayerBridge.swift"
 grep -Fq 'EeveeInvokeBool' "$repo_dir/Sources/EeveeSpotifyC/Tweak.m"
 grep -Fq 'function cueNextWord()' "$timeline_bundle_dir/app.js"
@@ -140,6 +150,26 @@ grep -Fq 'closeAttemptID' "$source_dir/LyricsTimelineEditorViewController.swift"
 grep -Fq 'fileSizeKey' "$source_dir/LyricsTimelineEditorViewController.swift"
 grep -Fq 'bestTranslationAlternative' "$timeline_bundle_dir/editor-state.js"
 grep -Fq 'loadDocument(payload) { editorState = State.createState(payload); history = []; future = []; render(); bridge({ command: "getPlayerState" }); return true; }' "$timeline_bundle_dir/app.js"
+grep -Fq 'class="mobile-workspace-tabs"' "$timeline_bundle_dir/index.html"
+grep -Fq 'function activateMobileView(name)' "$timeline_bundle_dir/app.js"
+grep -Fq 'grid-template-columns: repeat(4, minmax(0, 1fr));' "$timeline_bundle_dir/style.css"
+grep -Fq 'overflow-x: hidden;' "$timeline_bundle_dir/style.css"
+grep -Fq 'grid-template-columns: repeat(3, minmax(0, 1fr));' "$bundle_dir/style.css"
+grep -Fq 'env(safe-area-inset-bottom)' "$bundle_dir/style.css"
+grep -Fq 'struct LyricsEditorEntryGroup: HookGroup' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'Lyrics_CardElementImpl.CardHeaderView' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'Lyrics_FullscreenElementPageImpl.FullscreenElementViewController' "$source_dir/LyricsEditorEntryHooks.x.swift"
+if grep -Fq 'firstHorizontalStack' "$source_dir/LyricsEditorEntryHooks.x.swift"; then
+    echo "lyrics card editor entries must fail closed when the confirmed stack ivar is unavailable" >&2
+    exit 1
+fi
+grep -Fq 'launch: LyricsShareEditorLauncher.present' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'launch: LyricsTimelineEditorLauncher.present' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'activateLyricsEditorEntries()' "$repo_dir/Sources/EeveeSpotify/Tweak.x.swift"
+grep -Fq 'func present(from viewController: UIViewController)' "$source_dir/LyricsShareEditorLauncher.swift"
+grep -Fq '(presenter as? UINavigationController)?.visibleViewController' "$source_dir/LyricsShareEditorLauncher.swift"
+grep -Fq 'navigationController.viewControllers.first === self' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'navigationController.viewControllers.first === self' "$source_dir/LyricsTimelineEditorViewController.swift"
 
 if grep -Fq 'matchesCurrentTrack' "$source_dir/LyricsTimelineEditorViewController.swift"; then
     echo "timeline save must not depend on player availability" >&2

@@ -5,11 +5,36 @@ enum LyricsShareEditorLauncher {
     static func push(from navigationController: UINavigationController) {
         navigationController.pushViewController(LyricsShareEditorViewController(), animated: true)
     }
+
+    static func present(from viewController: UIViewController) {
+        LyricsEditorModalPresenter.present(LyricsShareEditorViewController(), from: viewController)
+    }
 }
 
 enum LyricsTimelineEditorLauncher {
     static func push(from navigationController: UINavigationController) {
         navigationController.pushViewController(LyricsTimelineEditorViewController(), animated: true)
+    }
+
+    static func present(from viewController: UIViewController) {
+        LyricsEditorModalPresenter.present(LyricsTimelineEditorViewController(), from: viewController)
+    }
+}
+
+private enum LyricsEditorModalPresenter {
+    static func present(_ editor: UIViewController, from source: UIViewController) {
+        var presenter = source
+        while let presented = presenter.presentedViewController {
+            presenter = presented
+        }
+        let visible = (presenter as? UINavigationController)?.visibleViewController ?? presenter
+        guard !(visible is LyricsShareEditorViewController),
+              !(visible is LyricsTimelineEditorViewController) else { return }
+
+        let navigationController = UINavigationController(rootViewController: editor)
+        navigationController.modalPresentationStyle = .fullScreen
+        navigationController.navigationBar.prefersLargeTitles = false
+        presenter.present(navigationController, animated: true)
     }
 }
 

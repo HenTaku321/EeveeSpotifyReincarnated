@@ -95,7 +95,7 @@
       copy.append(base, translation);
       const times = document.createElement("span"); times.className = "line-times"; times.textContent = `${line.startTimeMs || "—"}\n${line.endTimeMs || "—"}`;
       row.append(number, copy, times);
-      row.addEventListener("click", () => { editorState.selectedIndex = index; render(); scheduleDraft(); });
+      row.addEventListener("click", () => { editorState.selectedIndex = index; render(); scheduleDraft(); activateMobileView("current"); });
       list.append(row);
     });
     const selected = list.querySelector(".is-current");
@@ -114,6 +114,21 @@
   function updateCurrent(patch) { if (!editorState) return; mutate(() => State.applyLine(editorState, editorState.selectedIndex, patch)); }
 
   function currentPosition() { return Math.max(0, Math.round(Number(editorState?.player?.positionMs) || 0)); }
+  function activateMobileView(name) {
+    if (name !== "current" && name !== "lines") return;
+    const workspace = $(".workspace");
+    const tabs = $(".mobile-workspace-tabs");
+    if (!workspace) return;
+    workspace.dataset.mobileView = name;
+    document.querySelectorAll(".mobile-workspace-tabs [data-mobile-view]").forEach((button) => {
+      const active = button.dataset.mobileView === name;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+    if (tabs && root.matchMedia?.("(max-width: 680px)").matches) {
+      tabs.scrollIntoView({ block: "start", behavior: "auto" });
+    }
+  }
   function cueStart() { updateCurrent({ startTimeMs: String(currentPosition()) }); moveNext(); }
   function cueEnd() { updateCurrent({ endTimeMs: String(currentPosition()) }); moveNext(); }
   function cueNextWord() {
@@ -179,6 +194,9 @@
     $("#add-after").addEventListener("click", () => mutate(() => State.addLine(editorState, editorState.selectedIndex + 1)));
     $("#delete-current").addEventListener("click", () => mutate(() => State.removeLine(editorState, editorState.selectedIndex)));
     $("#save-button").addEventListener("click", save); $("#undo-button").addEventListener("click", undo); $("#redo-button").addEventListener("click", redo);
+    document.querySelectorAll(".mobile-workspace-tabs [data-mobile-view]").forEach((button) => {
+      button.addEventListener("click", () => activateMobileView(button.dataset.mobileView));
+    });
     document.querySelectorAll("[data-mode]").forEach((button) => button.addEventListener("click", () => mutate(() => State.setSyncType(editorState, button.dataset.mode))));
     $("#current-base").addEventListener("input", (event) => updateCurrent({ base: event.target.value }));
     $("#current-translation").addEventListener("input", (event) => updateCurrent({ translation: event.target.value }));

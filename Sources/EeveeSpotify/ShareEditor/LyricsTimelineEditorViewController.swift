@@ -206,7 +206,11 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
         closeAttemptID = nil
         cleanup()
         if let navigationController = navigationController,
-           navigationController.viewControllers.last === self {
+           navigationController.viewControllers.first === self,
+           navigationController.presentingViewController != nil {
+            navigationController.dismiss(animated: true)
+        } else if let navigationController = navigationController,
+                  navigationController.viewControllers.last === self {
             navigationController.popViewController(animated: true)
         } else {
             dismiss(animated: true)
