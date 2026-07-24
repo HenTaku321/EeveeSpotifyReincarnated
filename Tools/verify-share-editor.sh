@@ -136,6 +136,14 @@ grep -Fq 'private weak var observedPlayer: AnyObject?' "$source_dir/LyricsTimeli
 grep -Fq 'return observedPlayer' "$source_dir/LyricsTimelinePlayerBridge.swift"
 grep -Fq 'let resolvedDuration = directDuration ?? durationMs' "$source_dir/LyricsTimelinePlayerBridge.swift"
 grep -Fq 'private func optionalNumber(' "$source_dir/LyricsTimelinePlayerBridge.swift"
+grep -Fq 'let directPlayer = statefulControlPlayer()' "$source_dir/LyricsTimelinePlayerBridge.swift"
+grep -Fq 'let isPlaying = directIsPlaying ?? false' "$source_dir/LyricsTimelinePlayerBridge.swift"
+grep -Fq 'private func statefulControlPlayer() -> AnyObject?' "$source_dir/LyricsTimelinePlayerBridge.swift"
+if grep -Eq 'observedIsPlaying|elapsedMs' \
+    "$source_dir/LyricsTimelinePlayerBridge.swift"; then
+    echo "timeline player must fail closed instead of trusting or extrapolating observer playback state" >&2
+    exit 1
+fi
 grep -Fq '} else if hasStateTrack {' "$source_dir/LyricsTimelinePlayerBridge.swift"
 grep -Fq 'let matchingPlayerTrack = liveTrackID == trackID ? playerTrack : nil' "$source_dir/LyricsShareEditorDocument.swift"
 grep -Fq 'setIsPaused:' "$source_dir/LyricsTimelinePlayerBridge.swift"
@@ -156,9 +164,38 @@ grep -Fq 'grid-template-columns: repeat(4, minmax(0, 1fr));' "$timeline_bundle_d
 grep -Fq 'overflow-x: hidden;' "$timeline_bundle_dir/style.css"
 grep -Fq 'grid-template-columns: repeat(3, minmax(0, 1fr));' "$bundle_dir/style.css"
 grep -Fq 'env(safe-area-inset-bottom)' "$bundle_dir/style.css"
-grep -Fq 'struct LyricsEditorEntryGroup: HookGroup' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'max-width: 580px;' "$bundle_dir/style.css"
+grep -Fq 'max-width: 520px;' "$bundle_dir/style.css"
+if awk '
+    /#preview-canvas[[:space:]]*\{/ { in_canvas = 1 }
+    in_canvas && /(dvh|svh)/ { found = 1 }
+    in_canvas && /}/ { in_canvas = 0 }
+    END { exit(found ? 0 : 1) }
+' "$bundle_dir/style.css"; then
+    echo "preview canvas must retain a legacy-WebKit-safe width fallback" >&2
+    exit 1
+fi
+grep -Fq 'struct LyricsEditorCardEntryGroup: HookGroup' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'struct LyricsEditorFullscreenEntryGroup: HookGroup' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'struct LyricsEditorSingalongEntryGroup: HookGroup' "$source_dir/LyricsEditorEntryHooks.x.swift"
 grep -Fq 'Lyrics_CardElementImpl.CardHeaderView' "$source_dir/LyricsEditorEntryHooks.x.swift"
 grep -Fq 'Lyrics_FullscreenElementPageImpl.FullscreenElementViewController' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'Lyrics_FullscreenSingalongPageImpl.FullscreenElementViewController' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'func didMoveToWindow()' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'func layoutSubviews()' "$source_dir/LyricsEditorEntryHooks.x.swift"
+if grep -Fq 'func initWithFrame(' "$source_dir/LyricsEditorEntryHooks.x.swift" ||
+   grep -Fq 'func initWithCoder(' "$source_dir/LyricsEditorEntryHooks.x.swift"; then
+    echo "CardHeaderView unimplemented initializers must not be hooked" >&2
+    exit 1
+fi
+grep -Fq 'private final class LyricsCardEntryRetryState: NSObject' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'weak var header: UIView?' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'var remainingAttempts = 8' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'CardHeaderView stack unavailable after lifecycle retries' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'guard header.window != nil else { return }' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'LyricsEditorCardEntryGroup().activate()' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'LyricsEditorFullscreenEntryGroup().activate()' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'LyricsEditorSingalongEntryGroup().activate()' "$source_dir/LyricsEditorEntryHooks.x.swift"
 if grep -Fq 'firstHorizontalStack' "$source_dir/LyricsEditorEntryHooks.x.swift"; then
     echo "lyrics card editor entries must fail closed when the confirmed stack ivar is unavailable" >&2
     exit 1

@@ -2,10 +2,24 @@ import ObjectiveC.runtime
 import Orion
 import UIKit
 
-struct LyricsEditorEntryGroup: HookGroup {}
+struct LyricsEditorCardEntryGroup: HookGroup {}
+struct LyricsEditorFullscreenEntryGroup: HookGroup {}
+struct LyricsEditorSingalongEntryGroup: HookGroup {}
 
 private var lyricsCardEntryAssociationKey: UInt8 = 0
+private var lyricsCardEntryRetryAssociationKey: UInt8 = 0
 private var lyricsFullscreenEntryAssociationKey: UInt8 = 0
+
+private final class LyricsCardEntryRetryState: NSObject {
+    weak var header: UIView?
+    var remainingAttempts = 8
+    var isScheduled = false
+    var didLogExhaustion = false
+
+    init(header: UIView) {
+        self.header = header
+    }
+}
 
 private final class LyricsEditorEntryButton: UIButton {
     private let handler: () -> Void
@@ -40,16 +54,10 @@ private final class LyricsEditorEntryButton: UIButton {
 }
 
 private enum LyricsEditorEntryInstaller {
-    static func attachCardEntries(to header: UIView, attempt: Int = 0) {
+    static func attachCardEntries(to header: UIView) {
         guard objc_getAssociatedObject(header, &lyricsCardEntryAssociationKey) == nil else { return }
         guard let stack = cardHeaderStack(in: header) else {
-            guard attempt < 5 else {
-                writeDebugLog("[LyricsEditor] CardHeaderView stack unavailable")
-                return
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                attachCardEntries(to: header, attempt: attempt + 1)
-            }
+            scheduleCardEntryRetry(for: header)
             return
         }
 
@@ -68,6 +76,7 @@ private enum LyricsEditorEntryInstaller {
         stack.addArrangedSubview(shareButton)
         stack.addArrangedSubview(timelineButton)
         objc_setAssociatedObject(header, &lyricsCardEntryAssociationKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        objc_setAssociatedObject(header, &lyricsCardEntryRetryAssociationKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
 
     static func attachFullscreenEntries(to controller: UIViewController) {
@@ -116,24 +125,70 @@ private enum LyricsEditorEntryInstaller {
         }
         return nil
     }
+
+    private static func scheduleCardEntryRetry(for header: UIView) {
+        guard header.window != nil else { return }
+        let retry: LyricsCardEntryRetryState
+        if let existing = objc_getAssociatedObject(header, &lyricsCardEntryRetryAssociationKey) as? LyricsCardEntryRetryState {
+            retry = existing
+        } else {
+            retry = LyricsCardEntryRetryState(header: header)
+            objc_setAssociatedObject(
+                header,
+                &lyricsCardEntryRetryAssociationKey,
+                retry,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+        guard !retry.isScheduled else { return }
+        guard retry.remainingAttempts > 0 else {
+            if !retry.didLogExhaustion {
+                retry.didLogExhaustion = true
+                writeDebugLog("[LyricsEditor] CardHeaderView stack unavailable after lifecycle retries")
+            }
+            return
+        }
+        retry.isScheduled = true
+        retry.remainingAttempts -= 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak retry] in
+            guard let retry = retry else { return }
+            retry.isScheduled = false
+            guard let header = retry.header, header.window != nil else { return }
+            attachCardEntries(to: header)
+        }
+    }
 }
 
 class LyricsCardHeaderEditorEntryHook: ClassHook<UIView> {
-    typealias Group = LyricsEditorEntryGroup
+    typealias Group = LyricsEditorCardEntryGroup
     static let targetName = "Lyrics_CardElementImpl.CardHeaderView"
 
-    func initWithFrame(_ frame: CGRect) -> Target {
-        let header = orig.initWithFrame(frame)
-        DispatchQueue.main.async {
-            LyricsEditorEntryInstaller.attachCardEntries(to: header)
-        }
-        return header
+    func didMoveToWindow() {
+        orig.didMoveToWindow()
+        guard target.window != nil else { return }
+        LyricsEditorEntryInstaller.attachCardEntries(to: target)
+    }
+
+    func layoutSubviews() {
+        orig.layoutSubviews()
+        guard target.window != nil else { return }
+        LyricsEditorEntryInstaller.attachCardEntries(to: target)
     }
 }
 
 class LyricsFullscreenEditorEntryHook: ClassHook<UIViewController> {
-    typealias Group = LyricsEditorEntryGroup
+    typealias Group = LyricsEditorFullscreenEntryGroup
     static let targetName = "Lyrics_FullscreenElementPageImpl.FullscreenElementViewController"
+
+    func viewDidAppear(_ animated: Bool) {
+        orig.viewDidAppear(animated)
+        LyricsEditorEntryInstaller.attachFullscreenEntries(to: target)
+    }
+}
+
+class LyricsSingalongFullscreenEditorEntryHook: ClassHook<UIViewController> {
+    typealias Group = LyricsEditorSingalongEntryGroup
+    static let targetName = "Lyrics_FullscreenSingalongPageImpl.FullscreenElementViewController"
 
     func viewDidAppear(_ animated: Bool) {
         orig.viewDidAppear(animated)
@@ -146,13 +201,39 @@ func activateLyricsEditorEntries() {
     let fullscreenClass = NSClassFromString(
         "Lyrics_FullscreenElementPageImpl.FullscreenElementViewController"
     )
-    guard let cardClass = cardClass,
-          class_getInstanceMethod(cardClass, Selector(("initWithFrame:"))) != nil,
-          let fullscreenClass = fullscreenClass,
-          class_getInstanceMethod(fullscreenClass, #selector(UIViewController.viewDidAppear(_:))) != nil else {
+    let singalongClass = NSClassFromString(
+        "Lyrics_FullscreenSingalongPageImpl.FullscreenElementViewController"
+    )
+    var activated = [String]()
+
+    if let cardClass = cardClass,
+       class_getInstanceMethod(cardClass, #selector(UIView.didMoveToWindow)) != nil,
+       class_getInstanceMethod(cardClass, #selector(UIView.layoutSubviews)) != nil {
+        LyricsEditorCardEntryGroup().activate()
+        activated.append("card")
+    } else {
+        writeDebugLog("[LyricsEditor] skipped card entry hook: class/lifecycle mismatch")
+    }
+
+    if let fullscreenClass = fullscreenClass,
+       class_getInstanceMethod(fullscreenClass, #selector(UIViewController.viewDidAppear(_:))) != nil {
+        LyricsEditorFullscreenEntryGroup().activate()
+        activated.append("fullscreen")
+    } else {
+        writeDebugLog("[LyricsEditor] skipped fullscreen entry hook: class/selector mismatch")
+    }
+
+    if let singalongClass = singalongClass,
+       class_getInstanceMethod(singalongClass, #selector(UIViewController.viewDidAppear(_:))) != nil {
+        LyricsEditorSingalongEntryGroup().activate()
+        activated.append("singalong")
+    } else {
+        writeDebugLog("[LyricsEditor] skipped singalong entry hook: class/selector mismatch")
+    }
+
+    guard !activated.isEmpty else {
         writeDebugLog("[LyricsEditor] skipped entry hooks: Spotify 9.1.x class/selector mismatch")
         return
     }
-    LyricsEditorEntryGroup().activate()
-    writeDebugLog("[LyricsEditor] card and fullscreen entry hooks activated")
+    writeDebugLog("[LyricsEditor] entry hooks activated: \(activated.joined(separator: ","))")
 }

@@ -31,9 +31,6 @@ final class LyricsTimelinePlayerBridge {
     private var trackId = ""
     private var positionMs = 0
     private var durationMs = 0
-    private var isPlaying = false
-    private var playbackSpeed = 1.0
-    private var capturedAt = ProcessInfo.processInfo.systemUptime
     private var seekSelector: Selector?
     private var capturedTrack: LyricsShareEditorTrackCandidate?
     private weak var observedPlayer: AnyObject?
@@ -43,8 +40,6 @@ final class LyricsTimelinePlayerBridge {
     func capture(player: AnyObject, state: AnyObject) {
         let positionRaw = number(state, key: "position")
         let durationRaw = number(state, key: "duration")
-        let speed = number(state, key: "playbackSpeed")
-        let playing = bool(state, key: "isPlaying")
         let hasStateTrack = safeRead(state, key: "track") != nil
         let resolvedTrackID = resolveTrackID(state: state)
         let resolvedTrack = resolveTrackCandidate(state: state, trackID: resolvedTrackID)
@@ -62,9 +57,6 @@ final class LyricsTimelinePlayerBridge {
         durationMs = secondsToMilliseconds(durationRaw)
         let normalizedPosition = max(0, secondsToMilliseconds(positionRaw))
         positionMs = durationMs > 0 ? min(normalizedPosition, durationMs) : normalizedPosition
-        playbackSpeed = speed > 0 ? speed : 1
-        isPlaying = playing
-        capturedAt = ProcessInfo.processInfo.systemUptime
         lock.unlock()
     }
 
@@ -84,22 +76,26 @@ final class LyricsTimelinePlayerBridge {
         }
         lock.lock()
         let control = controlPlayer()
-        let directPosition = control.flatMap { optionalNumber($0, key: "position") }
+        let directPlayer = statefulControlPlayer()
+        let directPosition = directPlayer.flatMap { optionalNumber($0, key: "position") }
             .map(secondsToMilliseconds)
-        let directDuration = control.flatMap { optionalNumber($0, key: "duration") }
+        let directDuration = directPlayer.flatMap { optionalNumber($0, key: "duration") }
             .map(secondsToMilliseconds)
-        let elapsedMs = isPlaying ? max(0, ProcessInfo.processInfo.systemUptime - capturedAt) * 1000 * playbackSpeed : 0
-        let estimatedPosition = max(0, positionMs + Int(elapsedMs.rounded()))
+        let directIsPlaying = directPlayer.flatMap { player in
+            optionalBool(player, key: "isPaused").map { !$0 }
+        }
         let resolvedDuration = directDuration ?? durationMs
-        let resolvedPosition = directPosition ?? estimatedPosition
+        // The observer supplies a last-known position but not a continuously readable clock. Do
+        // not turn a stale `isPlaying` callback into a locally advancing playhead.
+        let resolvedPosition = directPosition ?? positionMs
         let livePosition = resolvedDuration > 0 ? min(resolvedPosition, resolvedDuration) : resolvedPosition
         let liveTrackID = currentTrackID()
         let hasLiveTrack = !liveTrackID.isEmpty
         let trackId = hasLiveTrack ? liveTrackID : (control == nil ? self.trackId : "")
         if !trackId.isEmpty { self.trackId = trackId }
-        let isPlaying = control.flatMap { player in
-            optionalBool(player, key: "isPaused").map { !$0 }
-        } ?? self.isPlaying
+        // Observer callbacks can be missing or stale after a pause transition. Only expose a
+        // playing clock when the verified stateful player can be polled directly.
+        let isPlaying = directIsPlaying ?? false
         let seekRestricted = control.flatMap { player -> Bool? in
             guard let disallow = optionalBool(player, key: "disallowSeeking"),
                   let always = optionalBool(player, key: "disallowSeekingAlways") else { return nil }
@@ -142,7 +138,6 @@ final class LyricsTimelinePlayerBridge {
         let seconds = Double(max(0, positionMs)) / 1000
         trackId = liveTrackID
         self.positionMs = max(0, positionMs)
-        capturedAt = ProcessInfo.processInfo.systemUptime
         lock.unlock()
         EeveeSBInvokeSeekDouble(player, selector, seconds)
         return true
@@ -174,8 +169,6 @@ final class LyricsTimelinePlayerBridge {
             return false
         }
         trackId = liveTrackID
-        isPlaying = !paused
-        capturedAt = ProcessInfo.processInfo.systemUptime
         lock.unlock()
         EeveeInvokeBool(player, selector, paused)
         return true
@@ -288,10 +281,6 @@ final class LyricsTimelinePlayerBridge {
         (safeRead(object, key: key) as? NSNumber)?.doubleValue
     }
 
-    private func bool(_ object: AnyObject, key: String) -> Bool {
-        (safeRead(object, key: key) as? NSNumber)?.boolValue ?? false
-    }
-
     private func optionalBool(_ object: AnyObject, key: String) -> Bool? {
         (safeRead(object, key: key) as? NSNumber)?.boolValue
     }
@@ -304,11 +293,13 @@ final class LyricsTimelinePlayerBridge {
     }
 
     private func controlPlayer() -> AnyObject? {
-        if let player = statefulPlayer,
-           isTrackID(player.currentTrack()?.trackIdentifier ?? "") {
-            return player as AnyObject
-        }
-        return observedPlayer
+        statefulControlPlayer() ?? observedPlayer
+    }
+
+    private func statefulControlPlayer() -> AnyObject? {
+        guard let player = statefulPlayer,
+              isTrackID(player.currentTrack()?.trackIdentifier ?? "") else { return nil }
+        return player as AnyObject
     }
 
     private func currentTrackID() -> String {
