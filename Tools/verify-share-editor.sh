@@ -111,6 +111,7 @@ node --check "$bundle_dir/editor-state.js"
 node --check "$bundle_dir/renderer.js"
 node --check "$timeline_bundle_dir/app.js"
 node --check "$timeline_bundle_dir/editor-state.js"
+node --test "$repo_dir/Tools/share-editor-assets.test.js"
 
 grep -Fq 'name: "shareEditor"' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'X-MITM-Lyrics-Token' "$source_dir/LyricsShareEditorViewController.swift"
@@ -125,7 +126,10 @@ grep -Fq 'Documents/ShareEditor/Projects' "$source_dir/LyricsShareEditorLauncher
 grep -Fq "hide('#load-button')" "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'window.ShareEditor.serializeState();' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'window.ShareEditor.restoreState' "$source_dir/LyricsShareEditorViewController.swift"
-grep -Fq 'project.media.useTrackArtworkAsBackground = true;' "$source_dir/LyricsShareEditorViewController.swift"
+if grep -Fq 'project.media.useTrackArtworkAsBackground = true;' "$source_dir/LyricsShareEditorViewController.swift"; then
+    echo "track artwork must not be enabled as the share background automatically" >&2
+    exit 1
+fi
 grep -Fq 'maximumBytes = 8 * 1024 * 1024' "$source_dir/LyricsShareEditorBridge.swift"
 grep -Fq 'MPMediaItemPropertyAlbumTitle' "$source_dir/LyricsShareEditorDocument.swift"
 grep -Fq 'MPMediaItemPropertyArtwork' "$source_dir/LyricsShareEditorDocument.swift"
@@ -205,6 +209,14 @@ grep -Fq 'typedef void (*SeekFn)(id, SEL, double);' "$repo_dir/Sources/EeveeSpot
 grep -Fq 'closeAttemptID' "$source_dir/LyricsTimelineEditorViewController.swift"
 grep -Fq 'fileSizeKey' "$source_dir/LyricsTimelineEditorViewController.swift"
 grep -Fq 'bestTranslationAlternative' "$timeline_bundle_dir/editor-state.js"
+grep -Fq 'ensureTranslationAlternative' "$timeline_bundle_dir/editor-state.js"
+grep -Fq 'State.viewLine(editorState, index)' "$timeline_bundle_dir/app.js"
+grep -Fq 'class="lyric-field lyric-field-translation"' "$timeline_bundle_dir/index.html"
+grep -Fq '.line-copy small:empty' "$timeline_bundle_dir/style.css"
+if grep -Fq 'return `${left} (${right})`;' "$timeline_bundle_dir/editor-state.js"; then
+    echo "timeline translations must remain in alternatives instead of line.words" >&2
+    exit 1
+fi
 grep -Fq 'loadDocument(payload) { editorState = State.createState(payload); history = []; future = []; render(); bridge({ command: "getPlayerState" }); return true; }' "$timeline_bundle_dir/app.js"
 grep -Fq 'class="mobile-workspace-tabs"' "$timeline_bundle_dir/index.html"
 grep -Fq 'function activateMobileView(name)' "$timeline_bundle_dir/app.js"

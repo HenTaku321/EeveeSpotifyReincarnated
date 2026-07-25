@@ -36,16 +36,6 @@
     return { base: match[1], translation: match[2].trim(), style: "paren" };
   }
 
-  function buildWords(base, translation, oldWords) {
-    const left = asText(base);
-    const right = asText(translation).trim();
-    if (!right) {
-      const oldParts = splitTranslation(oldWords);
-      return left || (oldParts.translation ? oldParts.base : asText(oldWords));
-    }
-    return `${left} (${right})`;
-  }
-
   function normalizeSyllables(value) {
     const source = Array.isArray(value) ? value : (value == null ? [] : [value]);
     return source.map((item, index) => {
@@ -123,6 +113,24 @@
     return rankedTranslationAlternatives(lyrics, index)[0] || null;
   }
 
+  function ensureTranslationAlternative(lyrics, lineCount) {
+    if (!Array.isArray(lyrics.alternatives)) lyrics.alternatives = [];
+    let alternative = lyrics.alternatives
+      .filter((item) => item && typeof item === "object" && Array.isArray(item.lines))
+      .sort((left, right) => translationScore(right) - translationScore(left))[0];
+    if (!alternative) {
+      alternative = {
+        language: "zh-CN",
+        contentType: "translation",
+        isRtlLanguage: false,
+        lines: [],
+      };
+      lyrics.alternatives.push(alternative);
+    }
+    while (alternative.lines.length < lineCount) alternative.lines.push("");
+    return alternative;
+  }
+
   function alternativeTranslation(lyrics, index) {
     for (const candidate of rankedTranslationAlternatives(lyrics, index)) {
       const value = asText(candidate.lines[index]).trim();
@@ -141,9 +149,12 @@
     if (!lines.length) throw new Error("当前曲目没有可编辑歌词");
     response.lyrics.lines = lines.map((sourceLine, index) => {
       const line = normalizeLine(sourceLine);
-      if (!line.translation) {
-        const alternative = alternativeTranslation(response.lyrics, index);
-        if (alternative) line.words = buildWords(line.base, alternative, line.words);
+      const alternative = alternativeTranslation(response.lyrics, index);
+      if (alternative) {
+        if (line.translation && line.translation === alternative) line.words = line.base;
+      } else if (line.translation) {
+        ensureTranslationAlternative(response.lyrics, lines.length).lines[index] = line.translation;
+        line.words = line.base;
       }
       delete line.base;
       delete line.translation;
@@ -177,32 +188,38 @@
     return state.document.lyrics.lyrics.lines;
   }
 
-  function viewLine(line) {
+  function viewLine(state, index) {
+    const line = lines(state)[index];
+    if (!line) return normalizeLine(null);
     const normalized = normalizeLine(line);
-    return normalized;
+    const alternative = alternativeTranslation(state.document.lyrics.lyrics, index);
+    if (!alternative) return normalized;
+    return {
+      ...normalized,
+      base: normalized.translation === alternative ? normalized.base : asText(line.words),
+      translation: alternative,
+    };
   }
 
   function applyLine(state, index, patch) {
     const current = lines(state)[index];
     if (!current) return false;
-    const next = viewLine({ ...current, ...patch });
-    if (Object.prototype.hasOwnProperty.call(patch || {}, "base")) next.base = asText(patch.base);
-    if (Object.prototype.hasOwnProperty.call(patch || {}, "translation")) next.translation = asText(patch.translation);
-    const words = Object.prototype.hasOwnProperty.call(patch || {}, "base") ||
-      Object.prototype.hasOwnProperty.call(patch || {}, "translation")
-      ? buildWords(next.base, next.translation, current.words)
-      : asText(patch.words ?? current.words);
+    const hasBase = Object.prototype.hasOwnProperty.call(patch || {}, "base");
+    const hasTranslation = Object.prototype.hasOwnProperty.call(patch || {}, "translation");
+    const words = hasBase ? asText(patch.base) : asText(patch.words ?? current.words);
     lines(state)[index] = {
-      startTimeMs: next.startTimeMs,
-      endTimeMs: next.endTimeMs,
+      startTimeMs: validMilliseconds(patch.startTimeMs ?? current.startTimeMs),
+      endTimeMs: validMilliseconds(patch.endTimeMs ?? current.endTimeMs),
       words,
       syllables: Object.prototype.hasOwnProperty.call(patch || {}, "syllables")
         ? normalizeSyllables(patch.syllables)
         : normalizeSyllables(current.syllables),
     };
-    if (Object.prototype.hasOwnProperty.call(patch || {}, "translation")) {
-      const alternative = bestTranslationAlternative(state.document.lyrics.lyrics, index);
-      if (alternative) alternative.lines[index] = asText(patch.translation).trim();
+    if (hasTranslation) {
+      const translation = asText(patch.translation).trim();
+      const alternative = bestTranslationAlternative(state.document.lyrics.lyrics, index)
+        || (translation ? ensureTranslationAlternative(state.document.lyrics.lyrics, lines(state).length) : null);
+      if (alternative) alternative.lines[index] = translation;
     }
     return true;
   }
@@ -322,6 +339,7 @@
     normalizeDocument,
     createState,
     lines,
+    viewLine,
     applyLine,
     addLine,
     removeLine,

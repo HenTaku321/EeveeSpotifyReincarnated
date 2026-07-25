@@ -487,17 +487,10 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
               const project = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(
                 Uint8Array.from(atob('\(projectEncoded)'), character => character.charCodeAt(0))
               ));
-              const projectHadArtwork = Boolean(
-                project.document && project.document.track && project.document.track.coverUrl
-              );
               if (editorDocument.track && editorDocument.track.coverUrl
                   && project.document && project.document.track
                   && project.document.track.trackId === editorDocument.track.trackId) {
                 project.document.track.coverUrl = editorDocument.track.coverUrl;
-                if (!projectHadArtwork && (!project.media || !project.media.background)) {
-                  project.media = project.media || {};
-                  project.media.useTrackArtworkAsBackground = true;
-                }
               }
               window.ShareEditor.restoreState(project);
             } catch (error) {

@@ -358,7 +358,7 @@
       media: {
         background: null,
         cover: null,
-        useTrackArtworkAsBackground: Boolean(document.track.coverUrl),
+        useTrackArtworkAsBackground: false,
       },
       stickers: [],
       activeStickerId: null,

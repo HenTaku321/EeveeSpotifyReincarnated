@@ -55,8 +55,8 @@
     <section class="workspace" data-mobile-view="current">
       <div class="current-panel" id="current-panel">
         <div class="panel-heading"><div><span class="eyebrow">CURRENT LINE</span><h2 id="current-index">第 1 行</h2></div><button id="next-line" type="button">下一行 →</button></div>
-        <label>原文<textarea id="current-base" rows="3" dir="auto"></textarea></label>
-        <label>翻译<textarea id="current-translation" rows="2" dir="auto"></textarea></label>
+        <label class="lyric-field lyric-field-original"><span>原文</span><textarea id="current-base" rows="3" dir="auto"></textarea></label>
+        <label class="lyric-field lyric-field-translation"><span>译文</span><textarea id="current-translation" rows="2" dir="auto"></textarea></label>
         <div class="time-grid"><label>start (ms)<input id="current-start" inputmode="numeric"></label><label>end (ms)<input id="current-end" inputmode="numeric"></label></div>
         <label class="syllables-label">逐词时间 <textarea id="current-syllables" rows="3" placeholder="例如：1200:第一词\n1650:第二词"></textarea></label>
         <div class="current-actions"><button id="add-before" type="button">前面加行</button><button id="add-after" type="button">后面加行</button><button class="danger" id="delete-current" type="button">删除当前行</button></div>

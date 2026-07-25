@@ -365,6 +365,26 @@ textarea {
   line-height: 1.4;
 }
 
+.lyric-field {
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0f1511;
+}
+
+.lyric-field > span {
+  font-weight: 700;
+}
+
+.lyric-field-translation {
+  border-left: 3px solid #5a7564;
+}
+
+.lyric-field-translation textarea {
+  color: #c2d1c7;
+}
+
 input {
   min-height: 36px;
 }
@@ -443,7 +463,14 @@ input {
 
 .line-copy small {
   margin-top: 5px;
-  color: var(--muted);
+  padding-left: 8px;
+  border-left: 2px solid #52685a;
+  color: #b8c8be;
+  font-size: 12px;
+}
+
+.line-copy small:empty {
+  display: none;
 }
 
 .line-times {

@@ -31,6 +31,7 @@
 
   function lines() { return editorState ? State.lines(editorState) : []; }
   function currentLine() { return lines()[editorState?.selectedIndex || 0] || null; }
+  function currentViewLine() { return editorState ? State.viewLine(editorState, editorState.selectedIndex) : null; }
   function pushHistory() {
     if (!editorState) return;
     try { history.push(State.serializeState(editorState)); if (history.length > 40) history.shift(); future = []; } catch (_) {}
@@ -53,7 +54,7 @@
     $("#cue-end").disabled = !sameTrack;
     $("#cue-toggle").textContent = `打点：${editorState?.cueEnabled ? "开" : "关"}`;
     const wordMode = editorState?.cueWordMode === true;
-    const tokens = State.cueTokens(State.splitTranslation(currentLine()?.words || "").base);
+    const tokens = State.cueTokens(currentViewLine()?.base || "");
     const completed = State.normalizeSyllables(currentLine()?.syllables).length;
     $("#cue-word-toggle").textContent = wordMode ? `逐词：${Math.min(completed, tokens.length)}/${tokens.length}` : "逐词：关";
     $("#cue-start").textContent = wordMode ? "打下一个词" : "写入 start";
@@ -67,12 +68,13 @@
   function renderCurrent() {
     const line = currentLine();
     const index = editorState ? editorState.selectedIndex : 0;
+    const view = editorState ? State.viewLine(editorState, index) : null;
     $("#current-index").textContent = `第 ${index + 1} 行`;
     for (const id of inputIds) {
       const element = $(`#${id}`);
       if (!element) continue;
-      const value = id === "current-base" ? State.splitTranslation(line?.words || "").base
-        : id === "current-translation" ? State.splitTranslation(line?.words || "").translation
+      const value = id === "current-base" ? view?.base || ""
+        : id === "current-translation" ? view?.translation || ""
         : id === "current-syllables" ? State.normalizeSyllables(line?.syllables).filter((x) => x.timeMs || x.text).map((x) => `${x.timeMs}:${x.text}`).join("\n")
         : id === "current-start" ? line?.startTimeMs || ""
         : id === "current-end" ? line?.endTimeMs || ""
@@ -93,9 +95,9 @@
       row.dataset.index = String(index);
       const number = document.createElement("span"); number.className = "line-number"; number.textContent = String(index + 1).padStart(2, "0");
       const copy = document.createElement("span"); copy.className = "line-copy";
-      const parts = State.splitTranslation(line.words);
-      const base = document.createElement("strong"); base.textContent = parts.base || "（空行）";
-      const translation = document.createElement("small"); translation.textContent = parts.translation;
+      const view = State.viewLine(editorState, index);
+      const base = document.createElement("strong"); base.textContent = view.base || "（空行）";
+      const translation = document.createElement("small"); translation.textContent = view.translation;
       copy.append(base, translation);
       const times = document.createElement("span"); times.className = "line-times"; times.textContent = `${line.startTimeMs || "—"}\n${line.endTimeMs || "—"}`;
       row.append(number, copy, times);
@@ -137,7 +139,7 @@
   function cueEnd() { updateCurrent({ endTimeMs: String(currentPosition()) }); moveNext(); }
   function cueNextWord() {
     const line = currentLine();
-    const tokens = State.cueTokens(State.splitTranslation(line?.words || "").base);
+    const tokens = State.cueTokens(currentViewLine()?.base || "");
     if (!tokens.length) { status("当前行没有可打点的词", true); return; }
     const items = State.normalizeSyllables(line?.syllables);
     if (items.length >= tokens.length) { cueEnd(); return; }
