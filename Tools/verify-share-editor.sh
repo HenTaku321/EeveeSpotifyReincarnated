@@ -45,9 +45,14 @@ grep -Fq 'if top_level != expected_top_level:' "$workflow"
 grep -Fq 'EeveeSwiftProtobuf.framework/EeveeSwiftProtobuf' "$workflow"
 grep -Fq 'Orion.framework/Orion' "$workflow"
 grep -Fq '"Orion.framework",' "$workflow"
-grep -Fq 'ARCHS=arm64 TARGET=iphone:clang:latest:14.0' "$workflow"
-grep -Fq 'make -C "$THEOS/vendor/orion" package FINALPACKAGE=1' "$workflow"
-grep -Fq 'DWARF_DSYM_FOLDER_PATH=$THEOS/vendor/orion/.theos/obj/dSYMs' "$workflow"
+grep -Fq 'https://github.com/theos/orion/releases/download/1.0.2/Orion_1.0.2.zip' "$workflow"
+grep -Fq '67ea96da8983a792bc9e5549472c2e597b84024c66bce888ce19e7940e413e55' "$workflow"
+grep -Fq 'dev.theos.orion14_1.0.2_iphoneos-arm64.deb' "$workflow"
+grep -Fq '5389d02f0f2e74d3cfbeca88739a85ba81f36a0294439559c89d7a76e6bee21e' "$workflow"
+if grep -Fq 'make -C "$THEOS/vendor/orion"' "$workflow"; then
+    echo "workflow must use the pinned official Orion runtime instead of rebuilding it" >&2
+    exit 1
+fi
 grep -Fq 'EeveeSpotify.bundle/ShareEditor/index.html' "$workflow"
 grep -Fq 'EeveeSpotify.bundle/TimelineEditor/index.html' "$workflow"
 grep -Fq 'name: eevee-share-editor-trollfools-zip' "$workflow"

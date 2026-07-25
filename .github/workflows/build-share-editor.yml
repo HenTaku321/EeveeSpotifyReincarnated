@@ -64,15 +64,24 @@ jobs:
       - name: Verify editor sources and embedded assets
         run: ./Tools/verify-share-editor.sh
 
-      - name: Build Orion runtime framework
+      - name: Fetch pinned Orion runtime framework
         run: |
           set -euo pipefail
-          make -C "$THEOS/vendor/orion" clean
-          THEOS_PACKAGE_SCHEME=rootless make -C "$THEOS/vendor/orion" package FINALPACKAGE=1 \
-            ARCHS=arm64 TARGET=iphone:clang:latest:14.0 \
-            Orion_XCODEFLAGS="RUN_DOCUMENTATION_COMPILER=NO IPHONEOS_DEPLOYMENT_TARGET=14.0 DWARF_DSYM_FOLDER_PATH=$THEOS/vendor/orion/.theos/obj/dSYMs"
-          ORION_DEB="$(find "$THEOS/vendor/orion/packages" -maxdepth 1 -type f -name '*.deb' -print | sort | tail -n 1)"
-          test -n "$ORION_DEB"
+          ORION_ZIP="$RUNNER_TEMP/Orion_1.0.2.zip"
+          ORION_DEB="$RUNNER_TEMP/dev.theos.orion14_1.0.2_iphoneos-arm64.deb"
+          rm -f "$ORION_ZIP" "$ORION_DEB"
+          curl --fail --location --retry 3 --silent --show-error \
+            --proto '=https' --proto-redir '=https' \
+            --output "$ORION_ZIP" \
+            'https://github.com/theos/orion/releases/download/1.0.2/Orion_1.0.2.zip'
+          printf '%s  %s\n' \
+            '67ea96da8983a792bc9e5549472c2e597b84024c66bce888ce19e7940e413e55' \
+            "$ORION_ZIP" | shasum -a 256 -c -
+          unzip -q "$ORION_ZIP" 'dev.theos.orion14_1.0.2_iphoneos-arm64.deb' \
+            -d "$RUNNER_TEMP"
+          printf '%s  %s\n' \
+            '5389d02f0f2e74d3cfbeca88739a85ba81f36a0294439559c89d7a76e6bee21e' \
+            "$ORION_DEB" | shasum -a 256 -c -
           rm -rf "$RUNNER_TEMP/orion-root"
           mkdir -p "$RUNNER_TEMP/orion-root"
           dpkg-deb -x "$ORION_DEB" "$RUNNER_TEMP/orion-root"
