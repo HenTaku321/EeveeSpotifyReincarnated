@@ -1,4 +1,5 @@
 import Foundation
+import Photos
 import UIKit
 import WebKit
 
@@ -23,6 +24,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
     private var projectWriteInFlight = false
     private var projectReady = false
     private var activeTrack: LyricsShareEditorTrack?
+    private let artworkLoader = LyricsShareEditorArtworkLoader()
     private var exportInFlight = false
     private var isClosing = false
     private var closeAttemptID: UUID?
@@ -326,6 +328,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
     }
 
     private func fetchLyrics(for track: LyricsShareEditorTrack) {
+        artworkLoader.cancel()
         requestTask?.cancel()
         session?.invalidateAndCancel()
         sessionDelegate = nil
@@ -415,25 +418,46 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
                   matchesIdentity(returnedTrack["album"], track.album) else {
                 throw LyricsShareEditorError.invalidResponse("歌词服务返回的曲目身份与当前歌曲不一致。")
             }
-            var trackObject: [String: Any] = [
-                "trackId": track.trackId,
-                "title": track.title,
-                "artist": track.artist,
-                "album": track.album
-            ]
             if let artworkDataURL = LyricsShareEditorTrackResolver.currentArtworkDataURL(matching: track) {
-                trackObject["coverUrl"] = artworkDataURL
-                object["track"] = trackObject
-                if let encodedDocument = try? JSONSerialization.data(withJSONObject: object),
-                   encodedDocument.count > LyricsShareEditorPNG.maximumBytes {
-                    trackObject.removeValue(forKey: "coverUrl")
+                try finishLyricsDocument(object, track: track, artworkDataURL: artworkDataURL)
+                return
+            }
+            let remoteURL = LyricsShareEditorTrackResolver.currentArtworkRemoteURL(matching: track)
+            showStatus("正在读取专辑封面…", retryEnabled: false)
+            artworkLoader.resolve(track: track, preferredURL: remoteURL) { [weak self] artworkDataURL in
+                guard let self = self,
+                      !self.isClosing, !self.hasReleasedWebView,
+                      self.activeTrack?.trackId == track.trackId else { return }
+                do {
+                    try self.finishLyricsDocument(object, track: track, artworkDataURL: artworkDataURL)
+                } catch {
+                    self.showError(error.localizedDescription)
                 }
             }
-            object["track"] = trackObject
-            try injectDocument(object)
         } catch {
             showError(error.localizedDescription)
         }
+    }
+
+    private func finishLyricsDocument(_ source: [String: Any], track: LyricsShareEditorTrack,
+                                      artworkDataURL: String?) throws {
+        var object = source
+        var trackObject: [String: Any] = [
+            "trackId": track.trackId,
+            "title": track.title,
+            "artist": track.artist,
+            "album": track.album
+        ]
+        if let artworkDataURL = artworkDataURL {
+            trackObject["coverUrl"] = artworkDataURL
+            object["track"] = trackObject
+            if let encodedDocument = try? JSONSerialization.data(withJSONObject: object),
+               encodedDocument.count > LyricsShareEditorPNG.maximumBytes {
+                trackObject.removeValue(forKey: "coverUrl")
+            }
+        }
+        object["track"] = trackObject
+        try injectDocument(object)
     }
 
     private func matchesIdentity(_ value: Any?, _ expected: String) -> Bool {
@@ -463,10 +487,17 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
               const project = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(
                 Uint8Array.from(atob('\(projectEncoded)'), character => character.charCodeAt(0))
               ));
+              const projectHadArtwork = Boolean(
+                project.document && project.document.track && project.document.track.coverUrl
+              );
               if (editorDocument.track && editorDocument.track.coverUrl
                   && project.document && project.document.track
                   && project.document.track.trackId === editorDocument.track.trackId) {
                 project.document.track.coverUrl = editorDocument.track.coverUrl;
+                if (!projectHadArtwork && (!project.media || !project.media.background)) {
+                  project.media = project.media || {};
+                  project.media.useTrackArtworkAsBackground = true;
+                }
               }
               window.ShareEditor.restoreState(project);
             } catch (error) {
@@ -643,16 +674,23 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             do {
                 let png = try LyricsShareEditorPNG.decode(base64: base64, suggestedFilename: suggestedFilename)
+                if action == "save" {
+                    DispatchQueue.main.async {
+                        guard let self = self else { return }
+                        guard !self.isClosing, !self.hasReleasedWebView else {
+                            self.exportInFlight = false
+                            return
+                        }
+                        self.saveToPhotoLibrary(png)
+                    }
+                    return
+                }
                 let url = try Self.writeAtomically(png.data, filename: png.filename)
                 DispatchQueue.main.async {
                     guard let self = self else { return }
                     self.exportInFlight = false
                     guard !self.isClosing, !self.hasReleasedWebView else { return }
-                    if action == "share" {
-                        self.presentShareSheet(for: url)
-                    } else {
-                        self.presentNotice("PNG 已保存到 Documents/Exports/\(png.filename)。")
-                    }
+                    self.presentShareSheet(for: url)
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -662,6 +700,53 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
                     self.presentNotice("导出失败：\(error.localizedDescription)")
                 }
             }
+        }
+    }
+
+    private func saveToPhotoLibrary(_ png: LyricsShareEditorPNG) {
+        let save = { [weak self] in
+            guard let self = self else { return }
+            let options = PHAssetResourceCreationOptions()
+            options.originalFilename = png.filename
+            PHPhotoLibrary.shared().performChanges({
+                let request = PHAssetCreationRequest.forAsset()
+                request.addResource(with: .photo, data: png.data, options: options)
+            }) { [weak self] succeeded, error in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    self.exportInFlight = false
+                    guard !self.isClosing, !self.hasReleasedWebView else { return }
+                    if succeeded {
+                        self.presentNotice("PNG 已保存到系统图库。")
+                    } else {
+                        self.presentNotice("保存到系统图库失败：\(error?.localizedDescription ?? "未知错误")")
+                    }
+                }
+            }
+        }
+
+        switch PHPhotoLibrary.authorizationStatus(for: .addOnly) {
+        case .authorized, .limited:
+            save()
+        case .notDetermined:
+            PHPhotoLibrary.requestAuthorization(for: .addOnly) { [weak self] status in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    if status == .authorized || status == .limited {
+                        save()
+                    } else {
+                        self.exportInFlight = false
+                        guard !self.isClosing, !self.hasReleasedWebView else { return }
+                        self.presentNotice("没有系统图库写入权限，请在 iOS 设置中允许 Spotify 添加照片。")
+                    }
+                }
+            }
+        case .denied, .restricted:
+            exportInFlight = false
+            presentNotice("没有系统图库写入权限，请在 iOS 设置中允许 Spotify 添加照片。")
+        @unknown default:
+            exportInFlight = false
+            presentNotice("无法确认系统图库写入权限。")
         }
     }
 
@@ -711,6 +796,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
         hasReleasedWebView = true
         projectTimer?.invalidate()
         projectTimer = nil
+        artworkLoader.cancel()
         requestTask?.cancel()
         requestTask = nil
         session?.invalidateAndCancel()

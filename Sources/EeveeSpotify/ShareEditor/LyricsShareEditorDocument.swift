@@ -77,6 +77,16 @@ struct LyricsShareEditorTrackCandidate {
 
 enum LyricsShareEditorTrackResolver {
     private static let maximumArtworkBytes = 2 * 1024 * 1024
+    private static let artworkMetadataKeys = [
+        "image_xlarge_url",
+        "image_large_url",
+        "image_url",
+        "album_image_url",
+        "album_artwork_url",
+        "artwork_url",
+        "cover_url",
+        "image_uri"
+    ]
 
     static func currentCandidate() throws -> LyricsShareEditorTrackCandidate {
         dispatchPrecondition(condition: .onQueue(DispatchQueue.main))
@@ -157,6 +167,25 @@ enum LyricsShareEditorTrackResolver {
             return nil
         }
         return "data:image/jpeg;base64,\(data.base64EncodedString())"
+    }
+
+    static func currentArtworkRemoteURL(matching track: LyricsShareEditorTrack) -> URL? {
+        dispatchPrecondition(condition: .onQueue(DispatchQueue.main))
+        guard let playerTrack = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack,
+              trimmed(playerTrack.trackIdentifier) == track.trackId,
+              let object = playerTrack as? NSObject,
+              object.responds(to: NSSelectorFromString("metadata")) else {
+            return nil
+        }
+        let metadata = playerTrack.metadata()
+        for wantedKey in artworkMetadataKeys {
+            guard let value = metadata.first(where: { $0.key.caseInsensitiveCompare(wantedKey) == .orderedSame })?.value,
+                  let url = LyricsShareEditorArtworkLoader.allowedArtworkURL(from: value) else {
+                continue
+            }
+            return url
+        }
+        return nil
     }
 
     private static func firstNonempty(_ values: [String?]) -> String? {

@@ -18,7 +18,7 @@ $(shell printf 'enum GeneratedConfig {\n    static let repoSlug = "%s"\n    stat
 EeveeSpotify_FILES = $(shell find Sources/EeveeSpotify -name '*.swift') $(shell find Sources/EeveeSpotifyC -name '*.m' -o -name '*.c' -o -name '*.mm' -o -name '*.cpp')
 EeveeSpotify_SWIFTFLAGS = -ISources/EeveeSpotifyC/include -Osize
 EeveeSpotify_EXTRA_FRAMEWORKS = EeveeSwiftProtobuf
-EeveeSpotify_FRAMEWORKS = WebKit
+EeveeSpotify_FRAMEWORKS = WebKit Photos
 EeveeSpotify_CFLAGS = -fobjc-arc -ISources/EeveeSpotifyC/include -Os
 
 # Sideload compatibility (keychain redirect, group containers, CloudKit) is

@@ -114,21 +114,38 @@ node --check "$timeline_bundle_dir/editor-state.js"
 
 grep -Fq 'name: "shareEditor"' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'X-MITM-Lyrics-Token' "$source_dir/LyricsShareEditorViewController.swift"
-grep -Fq 'Documents/Exports/' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'import Photos' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'requestAuthorization(for: .addOnly)' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'PHAssetCreationRequest.forAsset()' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'addResource(with: .photo, data: png.data' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'PNG 已保存到系统图库。' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'appendingPathComponent("Exports", isDirectory: true)' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'EeveeSpotify_FRAMEWORKS = WebKit Photos' "$repo_dir/Makefile"
 grep -Fq 'Documents/ShareEditor/Projects' "$source_dir/LyricsShareEditorLauncher.swift"
 grep -Fq "hide('#load-button')" "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'window.ShareEditor.serializeState();' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'window.ShareEditor.restoreState' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'project.media.useTrackArtworkAsBackground = true;' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'maximumBytes = 8 * 1024 * 1024' "$source_dir/LyricsShareEditorBridge.swift"
 grep -Fq 'MPMediaItemPropertyAlbumTitle' "$source_dir/LyricsShareEditorDocument.swift"
 grep -Fq 'MPMediaItemPropertyArtwork' "$source_dir/LyricsShareEditorDocument.swift"
 grep -Fq 'artwork.image(at:' "$source_dir/LyricsShareEditorDocument.swift"
 grep -Fq 'jpegData(compressionQuality:' "$source_dir/LyricsShareEditorDocument.swift"
+grep -Fq 'image_xlarge_url' "$source_dir/LyricsShareEditorDocument.swift"
+grep -Fq 'image_large_url' "$source_dir/LyricsShareEditorDocument.swift"
+grep -Fq 'static func currentArtworkRemoteURL(matching track:' "$source_dir/LyricsShareEditorDocument.swift"
+grep -Fq 'open.spotify.com/oembed' "$source_dir/LyricsShareEditorArtwork.swift"
+grep -Fq 'fallbackTrack: track' "$source_dir/LyricsShareEditorArtwork.swift"
+grep -Fq 'image-cdn-' "$source_dir/LyricsShareEditorArtwork.swift"
+grep -Fq 'CGImageSourceCopyPropertiesAtIndex' "$source_dir/LyricsShareEditorArtwork.swift"
+grep -Fq 'maximumArtworkBytes = 2 * 1024 * 1024' "$source_dir/LyricsShareEditorArtwork.swift"
 grep -Fq 'scheme != "https", !isLoopback' "$source_dir/LyricsShareEditorConfiguration.swift"
 grep -Fq 'completionHandler(nil)' "$source_dir/LyricsShareEditorNetwork.swift"
 grep -Fq 'dataTask.cancel()' "$source_dir/LyricsShareEditorNetwork.swift"
 grep -Fq 'returnedTrackID.trimmingCharacters' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'LyricsShareEditorTrackResolver.currentArtworkDataURL(matching: track)' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'LyricsShareEditorTrackResolver.currentArtworkRemoteURL(matching: track)' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'artworkLoader.resolve(track: track' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'trackObject["coverUrl"] = artworkDataURL' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'encodedDocument.count > LyricsShareEditorPNG.maximumBytes' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'scriptMessage.frameInfo.isMainFrame' "$source_dir/LyricsShareEditorViewController.swift"
@@ -295,7 +312,7 @@ if grep -Fq 'matchesCurrentTrack' "$source_dir/LyricsTimelineEditorViewControlle
     exit 1
 fi
 
-if grep -ERq 'previewID|spotifycdn|cdn-link-previews|UIImageJPEGRepresentation' "$source_dir" "$bundle_dir"; then
+if grep -ERq 'previewID|cdn-link-previews|UIImageJPEGRepresentation' "$source_dir" "$bundle_dir"; then
     echo "forbidden Spotify preview/upload dependency found" >&2
     exit 1
 fi

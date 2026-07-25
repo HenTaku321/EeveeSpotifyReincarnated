@@ -4,13 +4,17 @@ final class LyricsShareEditorSessionDelegate: NSObject, URLSessionDataDelegate {
     typealias Completion = (Data, URLResponse?, Error?) -> Void
 
     private let maximumBytes: Int
+    private let oversizedResponseMessage: String
     private var completion: Completion?
     private var response: URLResponse?
     private var buffer = Data()
     private var boundaryError: Error?
 
-    init(maximumBytes: Int, completion: @escaping Completion) {
+    init(maximumBytes: Int,
+         oversizedResponseMessage: String = "歌词服务响应超过 8 MiB 限制。",
+         completion: @escaping Completion) {
         self.maximumBytes = maximumBytes
+        self.oversizedResponseMessage = oversizedResponseMessage
         self.completion = completion
     }
 
@@ -19,7 +23,7 @@ final class LyricsShareEditorSessionDelegate: NSObject, URLSessionDataDelegate {
         self.response = response
         let expected = response.expectedContentLength
         if expected > Int64(maximumBytes) {
-            boundaryError = LyricsShareEditorError.invalidResponse("歌词服务响应超过 8 MiB 限制。")
+            boundaryError = LyricsShareEditorError.invalidResponse(oversizedResponseMessage)
             completionHandler(.cancel)
             return
         }
@@ -29,7 +33,7 @@ final class LyricsShareEditorSessionDelegate: NSObject, URLSessionDataDelegate {
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard boundaryError == nil else { return }
         guard data.count <= maximumBytes - buffer.count else {
-            boundaryError = LyricsShareEditorError.invalidResponse("歌词服务响应超过 8 MiB 限制。")
+            boundaryError = LyricsShareEditorError.invalidResponse(oversizedResponseMessage)
             dataTask.cancel()
             return
         }
