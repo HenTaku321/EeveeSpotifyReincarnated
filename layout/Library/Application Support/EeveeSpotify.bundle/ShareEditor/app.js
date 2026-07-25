@@ -589,6 +589,8 @@
       });
       if (name === "type" || name === "layout") this.activateToolPanel("style");
       else if (name === "media" || name === "stickers") this.activateToolPanel(name);
+      const inspector = document.querySelector(".inspector");
+      if (inspector && name !== "lyrics" && name !== "export") inspector.scrollTop = 0;
     }
 
     setStatus(message, error) {

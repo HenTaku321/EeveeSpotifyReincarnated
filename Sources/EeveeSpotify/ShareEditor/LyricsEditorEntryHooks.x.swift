@@ -182,26 +182,40 @@ private enum LyricsEditorEntryInstaller {
             "$__lazy_storage_$_translationButtonContainerView",
             "$__lazy_storage_$_vocalRemovalButtonContainerView"
         ]
-        for name in preferredContainerIvars {
-            guard let ivar = class_getInstanceVariable(type(of: header), name),
-                  let container = object_getIvar(header, ivar) as? UIView else { continue }
-            container.layoutIfNeeded()
-            if let style = style(from: container) { return style }
+        let preferredContainers = preferredContainerIvars.compactMap { name -> UIView? in
+            guard let ivar = class_getInstanceVariable(type(of: header), name) else { return nil }
+            return object_getIvar(header, ivar) as? UIView
         }
-
-        // Snapshot the official arranged subviews before adding either editor button.
-        return stack.arrangedSubviews.compactMap { style(from: $0) }.first
+        let candidates = stack.arrangedSubviews + preferredContainers
+        for container in candidates {
+            container.layoutIfNeeded()
+            if let style = style(from: container, limitingHeight: stack.bounds.height) { return style }
+        }
+        return nil
     }
 
-    private static func style(from container: UIView) -> LyricsHeaderButtonStyle? {
-        let button = (container as? UIButton)
-            ?? container.subviews.first(where: { $0 is UIButton }) as? UIButton
-        guard let button = button else { return nil }
+    private static func descendantButton(in view: UIView) -> UIButton? {
+        if let button = view as? UIButton { return button }
+        for subview in view.subviews {
+            if let button = descendantButton(in: subview) { return button }
+        }
+        return nil
+    }
+
+    private static func style(from container: UIView, limitingHeight: CGFloat) -> LyricsHeaderButtonStyle? {
+        guard !container.isHidden, container.alpha > 0.01 else { return nil }
+        guard let button = descendantButton(in: container),
+              !button.isHidden,
+              button.alpha > 0.01 else { return nil }
 
         let containerSize = container.bounds.size
         let buttonSize = button.bounds.size
-        let size = containerSize.width > 0 && containerSize.height > 0 ? containerSize : buttonSize
-        guard size.width > 0, size.height > 0 else { return nil }
+        let measuredSize = containerSize.width > 0 && containerSize.height > 0 ? containerSize : buttonSize
+        guard measuredSize.width > 0, measuredSize.height > 0 else { return nil }
+        let measuredSide = min(measuredSize.width, measuredSize.height)
+        let side = limitingHeight > 0 ? min(measuredSide, limitingHeight) : measuredSide
+        guard side >= 20 else { return nil }
+        let size = CGSize(width: side, height: side)
 
         let styledView = button.backgroundColor == nil && button.layer.cornerRadius == 0
             ? container

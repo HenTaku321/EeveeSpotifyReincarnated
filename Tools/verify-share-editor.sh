@@ -185,8 +185,14 @@ grep -Fq 'class="mobile-tool-dock"' "$bundle_dir/index.html"
 grep -Fq 'data-mobile-tool="export"' "$bundle_dir/index.html"
 grep -Fq 'activateMobileTool(name)' "$bundle_dir/app.js"
 grep -Fq 'grid-template-columns: repeat(6, minmax(0, 1fr));' "$bundle_dir/style.css"
-grep -Fq 'inline-size: calc(100vw - 24px);' "$bundle_dir/style.css"
+grep -Fq 'width: clamp(120px, calc(55vh - 87px), calc(100vw - 24px));' "$bundle_dir/style.css"
+grep -Fq 'inline-size: clamp(120px, calc(55vh - 87px), calc(100vw - 24px));' "$bundle_dir/style.css"
 grep -Fq 'maximum-scale=1, user-scalable=no' "$bundle_dir/index.html"
+grep -Fq -- '-webkit-user-select: none;' "$bundle_dir/style.css"
+grep -Fq -- '-webkit-touch-callout: none;' "$bundle_dir/style.css"
+grep -Fq 'grid-template-rows: auto minmax(140px, 55%) minmax(130px, 1fr);' "$bundle_dir/style.css"
+grep -Fq 'overflow-y: auto;' "$bundle_dir/style.css"
+grep -Fq 'inspector.scrollTop = 0;' "$bundle_dir/app.js"
 grep -Fq 'grid-template-columns: repeat(3, minmax(0, 1fr));' "$bundle_dir/style.css"
 grep -Fq 'env(safe-area-inset-bottom)' "$bundle_dir/style.css"
 grep -Fq 'max-width: 580px;' "$bundle_dir/style.css"
@@ -223,8 +229,15 @@ grep -Fq '"$__lazy_storage_$_expandButtonContainerView"' "$source_dir/LyricsEdit
 grep -Fq '"$__lazy_storage_$_translationButtonContainerView"' "$source_dir/LyricsEditorEntryHooks.x.swift"
 grep -Fq '"$__lazy_storage_$_vocalRemovalButtonContainerView"' "$source_dir/LyricsEditorEntryHooks.x.swift"
 grep -Fq 'headerButtonStyle(in: header, fallbackStack: stack)' "$source_dir/LyricsEditorEntryHooks.x.swift"
-grep -Fq 'stack.arrangedSubviews.compactMap' "$source_dir/LyricsEditorEntryHooks.x.swift"
-grep -Fq 'container.subviews.first(where: { $0 is UIButton }) as? UIButton' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'let candidates = stack.arrangedSubviews + preferredContainers' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'private static func descendantButton(in view: UIView) -> UIButton?' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'guard !container.isHidden, container.alpha > 0.01' "$source_dir/LyricsEditorEntryHooks.x.swift"
+grep -Fq 'limitingHeight: stack.bounds.height' "$source_dir/LyricsEditorEntryHooks.x.swift"
+if grep -Fq 'container.subviews.first(where: { $0 is UIButton }) as? UIButton' \
+   "$source_dir/LyricsEditorEntryHooks.x.swift"; then
+    echo "lyrics header style lookup must recurse through Spotify container views" >&2
+    exit 1
+fi
 grep -Fq 'button.apply(headerStyle:' "$source_dir/LyricsEditorEntryHooks.x.swift"
 grep -Fq 'card entries attached:' "$source_dir/LyricsEditorEntryHooks.x.swift"
 grep -Fq 'preferredSymbolConfigurationForImage(in: .normal)' "$source_dir/LyricsEditorEntryHooks.x.swift"

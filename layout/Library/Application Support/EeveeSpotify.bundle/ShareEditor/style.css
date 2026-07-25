@@ -19,6 +19,9 @@
 * {
   box-sizing: border-box;
   letter-spacing: 0;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 html,
@@ -53,6 +56,13 @@ button,
 
 button {
   color: inherit;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 button:focus-visible,
@@ -794,7 +804,7 @@ dialog::backdrop {
     min-height: 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(140px, 55%) minmax(130px, 1fr);
     overflow: hidden;
   }
 
@@ -893,6 +903,7 @@ dialog::backdrop {
     border-top: 1px solid var(--border);
     border-left: 0;
     overflow: auto;
+    overflow-y: auto;
     overscroll-behavior: contain;
   }
 
@@ -914,12 +925,14 @@ dialog::backdrop {
   }
 
   #preview-canvas {
-    width: calc(100vw - 24px);
-    inline-size: calc(100vw - 24px);
+    width: clamp(120px, calc(55vh - 87px), calc(100vw - 24px));
+    inline-size: clamp(120px, calc(55vh - 87px), calc(100vw - 24px));
+    height: auto;
+    block-size: auto;
     min-width: 0;
     min-inline-size: 0;
     max-width: calc(100vw - 24px);
-    max-inline-size: min(100%, calc(100vw - 24px), 520px);
+    max-inline-size: calc(100vw - 24px);
   }
 
   .export-bar {
