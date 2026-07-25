@@ -64,6 +64,21 @@ jobs:
       - name: Verify editor sources and embedded assets
         run: ./Tools/verify-share-editor.sh
 
+      - name: Build Orion runtime framework
+        run: |
+          set -euo pipefail
+          make -C "$THEOS/vendor/orion" clean
+          THEOS_PACKAGE_SCHEME=rootless make -C "$THEOS/vendor/orion" package FINALPACKAGE=1
+          ORION_DEB="$(find "$THEOS/vendor/orion/packages" -maxdepth 1 -type f -name '*.deb' -print | sort | tail -n 1)"
+          test -n "$ORION_DEB"
+          rm -rf "$RUNNER_TEMP/orion-root"
+          mkdir -p "$RUNNER_TEMP/orion-root"
+          dpkg-deb -x "$ORION_DEB" "$RUNNER_TEMP/orion-root"
+          ORION_FRAMEWORK="$RUNNER_TEMP/orion-root/var/jb/Library/Frameworks/Orion.framework"
+          test -x "$ORION_FRAMEWORK/Orion"
+          lipo -info "$ORION_FRAMEWORK/Orion"
+          echo "ORION_FRAMEWORK=$ORION_FRAMEWORK" >> "$GITHUB_ENV"
+
       - name: Build renamed SwiftProtobuf framework
         run: |
           chmod +x Tools/SwiftProtobufBuild/build-eeveeswiftprotobuf.sh
@@ -93,6 +108,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${DEB_PATH:-}"
+          test -n "${ORION_FRAMEWORK:-}"
           rm -rf "$RUNNER_TEMP/deb-root" "$RUNNER_TEMP/trollfools-root"
           mkdir -p "$RUNNER_TEMP/deb-root" "$RUNNER_TEMP/trollfools-root" Outputs/DEBS Outputs/TROLLFOOLS
           dpkg-deb -x "$DEB_PATH" "$RUNNER_TEMP/deb-root"
@@ -105,6 +121,7 @@ jobs:
           BUNDLE="$RUNNER_TEMP/deb-root/var/jb/Library/Application Support/EeveeSpotify.bundle"
           test -n "$DYLIB"
           test -x "$FRAMEWORK"
+          test -x "$ORION_FRAMEWORK/Orion"
           test -f "$BUNDLE/ShareEditor/index.html"
           test -f "$BUNDLE/ShareEditor/app.js"
           test -f "$BUNDLE/TimelineEditor/index.html"
@@ -114,6 +131,7 @@ jobs:
           cp -f "$DYLIB" "$TROLLFOOLS_ROOT/EeveeSpotify.dylib"
           cp -R "$(dirname "$FRAMEWORK")" \
             "$TROLLFOOLS_ROOT/EeveeSwiftProtobuf.framework"
+          cp -R "$ORION_FRAMEWORK" "$TROLLFOOLS_ROOT/Orion.framework"
           cp -R "$BUNDLE" "$TROLLFOOLS_ROOT/EeveeSpotify.bundle"
           TROLLFOOLS_ZIP="$GITHUB_WORKSPACE/Outputs/TROLLFOOLS/EeveeSpotify-share-editor-trollfools.zip"
           (cd "$TROLLFOOLS_ROOT" && zip -qry "$TROLLFOOLS_ZIP" .)
@@ -127,11 +145,13 @@ jobs:
           expected_top_level = {
               "EeveeSpotify.dylib",
               "EeveeSwiftProtobuf.framework",
+              "Orion.framework",
               "EeveeSpotify.bundle",
           }
           required_files = {
               "EeveeSpotify.dylib",
               "EeveeSwiftProtobuf.framework/EeveeSwiftProtobuf",
+              "Orion.framework/Orion",
               "EeveeSpotify.bundle/ShareEditor/index.html",
               "EeveeSpotify.bundle/ShareEditor/app.js",
               "EeveeSpotify.bundle/TimelineEditor/index.html",

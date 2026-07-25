@@ -43,6 +43,8 @@ grep -Fq 'Outputs/TROLLFOOLS/EeveeSpotify-share-editor-trollfools.zip' "$workflo
 grep -Fq 'expected_top_level = {' "$workflow"
 grep -Fq 'if top_level != expected_top_level:' "$workflow"
 grep -Fq 'EeveeSwiftProtobuf.framework/EeveeSwiftProtobuf' "$workflow"
+grep -Fq 'Orion.framework/Orion' "$workflow"
+grep -Fq '"Orion.framework",' "$workflow"
 grep -Fq 'EeveeSpotify.bundle/ShareEditor/index.html' "$workflow"
 grep -Fq 'EeveeSpotify.bundle/TimelineEditor/index.html' "$workflow"
 grep -Fq 'name: eevee-share-editor-trollfools-zip' "$workflow"
