@@ -200,7 +200,11 @@
     }
 
     async resolve(state) {
-      const backgroundSource = state.media.background && state.media.background.src;
+      const backgroundSource = state.media.background && state.media.background.src
+        ? state.media.background.src
+        : state.media.useTrackArtworkAsBackground
+          ? state.document.track.coverUrl
+          : "";
       const coverSource = state.media.cover && state.media.cover.src
         ? state.media.cover.src
         : state.document.track.coverUrl;
@@ -539,10 +543,14 @@
       this.elements.textColor.value = state.style.textColor.slice(0, 7);
       this.elements.tintColor.value = state.style.backgroundTintedColor.slice(0, 7);
       this.elements.capsToggle.checked = state.style.capsMode === "allCaps";
-      this.elements.removeBackground.disabled = !state.media.background;
+      this.elements.removeBackground.disabled = !state.media.background && !state.media.useTrackArtworkAsBackground;
       this.elements.removeCover.disabled = !state.media.cover;
-      this.elements.backgroundFileName.textContent = state.media.background ? state.media.background.name : "选择本地图片";
-      this.elements.coverFileName.textContent = state.media.cover ? state.media.cover.name : "选择本地封面";
+      this.elements.backgroundFileName.textContent = state.media.background
+        ? state.media.background.name
+        : state.media.useTrackArtworkAsBackground ? "当前专辑封面" : "选择本地图片";
+      this.elements.coverFileName.textContent = state.media.cover
+        ? state.media.cover.name
+        : state.document.track.coverUrl ? "当前专辑封面" : "选择本地封面";
       this.elements.deleteSticker.disabled = !state.activeStickerId;
       this.elements.stickerSummary.textContent = state.activeStickerId
         ? `${state.stickers.findIndex((item) => item.id === state.activeStickerId) + 1} / ${state.stickers.length}`

@@ -358,6 +358,7 @@
       media: {
         background: null,
         cover: null,
+        useTrackArtworkAsBackground: Boolean(document.track.coverUrl),
       },
       stickers: [],
       activeStickerId: null,
@@ -501,7 +502,9 @@
       case "setMedia": {
         if (action.kind !== "background" && action.kind !== "cover") return state;
         const value = action.value === null ? null : normalizeMediaAsset(action.value);
-        return assertStateResourceBudget({ ...state, media: { ...state.media, [action.kind]: value } });
+        const media = { ...state.media, [action.kind]: value };
+        if (action.kind === "background") media.useTrackArtworkAsBackground = false;
+        return assertStateResourceBudget({ ...state, media });
       }
       case "addSticker": {
         if (state.stickers.length >= MAX_STICKERS) return state;
@@ -655,6 +658,17 @@
         if (value === null || value === undefined) return;
         state = reduceEditorState(state, { type: "setMedia", kind, value });
       });
+      if (typeof payload.media.useTrackArtworkAsBackground === "boolean") {
+        state = {
+          ...state,
+          media: {
+            ...state.media,
+            useTrackArtworkAsBackground: payload.media.useTrackArtworkAsBackground
+              && Boolean(state.document.track.coverUrl)
+              && !state.media.background,
+          },
+        };
+      }
     }
     if (Array.isArray(payload.stickers)) {
       if (payload.stickers.length > MAX_STICKERS) throw new RangeError(`最多添加 ${MAX_STICKERS} 个贴纸`);

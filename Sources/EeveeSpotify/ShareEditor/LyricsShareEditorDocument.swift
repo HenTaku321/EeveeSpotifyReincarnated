@@ -1,5 +1,6 @@
 import Foundation
 import MediaPlayer
+import UIKit
 
 enum LyricsShareEditorError: LocalizedError {
     case configuration(String)
@@ -75,6 +76,8 @@ struct LyricsShareEditorTrackCandidate {
 }
 
 enum LyricsShareEditorTrackResolver {
+    private static let maximumArtworkBytes = 2 * 1024 * 1024
+
     static func currentCandidate() throws -> LyricsShareEditorTrackCandidate {
         dispatchPrecondition(condition: .onQueue(DispatchQueue.main))
 
@@ -133,6 +136,27 @@ enum LyricsShareEditorTrackResolver {
         capturedTrackTitle = track.title
         capturedArtistName = track.artist
         capturedAlbumName = track.album
+    }
+
+    static func currentArtworkDataURL(matching track: LyricsShareEditorTrack) -> String? {
+        dispatchPrecondition(condition: .onQueue(DispatchQueue.main))
+        let info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+        guard equalIdentity(info[MPMediaItemPropertyTitle] as? String, track.title),
+              equalIdentity(info[MPMediaItemPropertyArtist] as? String, track.artist) else {
+            return nil
+        }
+        if let nowPlayingAlbum = trimmed(info[MPMediaItemPropertyAlbumTitle] as? String),
+           !equalIdentity(nowPlayingAlbum, track.album) {
+            return nil
+        }
+        guard let artwork = info[MPMediaItemPropertyArtwork] as? MPMediaItemArtwork,
+              let image = artwork.image(at: CGSize(width: 1024, height: 1024)),
+              let data = image.jpegData(compressionQuality: 0.82),
+              !data.isEmpty,
+              data.count <= maximumArtworkBytes else {
+            return nil
+        }
+        return "data:image/jpeg;base64,\(data.base64EncodedString())"
     }
 
     private static func firstNonempty(_ values: [String?]) -> String? {

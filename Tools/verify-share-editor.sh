@@ -121,10 +121,16 @@ grep -Fq 'window.ShareEditor.serializeState();' "$source_dir/LyricsShareEditorVi
 grep -Fq 'window.ShareEditor.restoreState' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'maximumBytes = 8 * 1024 * 1024' "$source_dir/LyricsShareEditorBridge.swift"
 grep -Fq 'MPMediaItemPropertyAlbumTitle' "$source_dir/LyricsShareEditorDocument.swift"
+grep -Fq 'MPMediaItemPropertyArtwork' "$source_dir/LyricsShareEditorDocument.swift"
+grep -Fq 'artwork.image(at:' "$source_dir/LyricsShareEditorDocument.swift"
+grep -Fq 'jpegData(compressionQuality:' "$source_dir/LyricsShareEditorDocument.swift"
 grep -Fq 'scheme != "https", !isLoopback' "$source_dir/LyricsShareEditorConfiguration.swift"
 grep -Fq 'completionHandler(nil)' "$source_dir/LyricsShareEditorNetwork.swift"
 grep -Fq 'dataTask.cancel()' "$source_dir/LyricsShareEditorNetwork.swift"
 grep -Fq 'returnedTrackID.trimmingCharacters' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'LyricsShareEditorTrackResolver.currentArtworkDataURL(matching: track)' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'trackObject["coverUrl"] = artworkDataURL' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'encodedDocument.count > LyricsShareEditorPNG.maximumBytes' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'scriptMessage.frameInfo.isMainFrame' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'removeScriptMessageHandler(forName: "shareEditor")' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'webView.isUserInteractionEnabled = false' "$source_dir/LyricsShareEditorViewController.swift"
@@ -195,12 +201,13 @@ grep -Fq 'class="mobile-tool-dock"' "$bundle_dir/index.html"
 grep -Fq 'data-mobile-tool="export"' "$bundle_dir/index.html"
 grep -Fq 'activateMobileTool(name)' "$bundle_dir/app.js"
 grep -Fq 'grid-template-columns: repeat(6, minmax(0, 1fr));' "$bundle_dir/style.css"
-grep -Fq 'width: clamp(120px, calc(55vh - 87px), calc(100vw - 24px));' "$bundle_dir/style.css"
-grep -Fq 'inline-size: clamp(120px, calc(55vh - 87px), calc(100vw - 24px));' "$bundle_dir/style.css"
+grep -Fq 'grid-template-rows: auto minmax(0, 1fr) minmax(180px, 42%);' "$bundle_dir/style.css"
+grep -Fq 'width: auto;' "$bundle_dir/style.css"
+grep -Fq 'height: 100%;' "$bundle_dir/style.css"
+grep -Fq 'max-block-size: 100%;' "$bundle_dir/style.css"
 grep -Fq 'maximum-scale=1, user-scalable=no' "$bundle_dir/index.html"
 grep -Fq -- '-webkit-user-select: none;' "$bundle_dir/style.css"
 grep -Fq -- '-webkit-touch-callout: none;' "$bundle_dir/style.css"
-grep -Fq 'grid-template-rows: auto minmax(140px, 55%) minmax(130px, 1fr);' "$bundle_dir/style.css"
 grep -Fq 'overflow-y: auto;' "$bundle_dir/style.css"
 grep -Fq 'inspector.scrollTop = 0;' "$bundle_dir/app.js"
 grep -Fq 'grid-template-columns: repeat(3, minmax(0, 1fr));' "$bundle_dir/style.css"
@@ -213,6 +220,16 @@ if awk '
     END { exit(found ? 0 : 1) }
 ' "$bundle_dir/style.css"; then
     echo "preview canvas must retain a legacy-WebKit-safe width fallback" >&2
+    exit 1
+fi
+for controller in LyricsShareEditorViewController.swift LyricsTimelineEditorViewController.swift; do
+    grep -Fq 'webView.scrollView.contentInsetAdjustmentBehavior = .never' "$source_dir/$controller"
+    grep -Fq 'webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)' "$source_dir/$controller"
+    grep -Fq 'webView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)' "$source_dir/$controller"
+done
+if sed -n '/struct LyricsShareEditorTrack: Encodable {/,/^}/p' \
+    "$source_dir/LyricsShareEditorDocument.swift" | grep -Eq 'cover|artwork|Data'; then
+    echo "artwork must remain outside the server request track payload" >&2
     exit 1
 fi
 grep -Fq 'struct LyricsEditorCardEntryGroup: HookGroup' "$source_dir/LyricsEditorEntryHooks.x.swift"

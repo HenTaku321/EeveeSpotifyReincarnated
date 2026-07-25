@@ -77,15 +77,16 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
         )
 
         webView.navigationDelegate = self
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(webView)
 
         configureStatusView()
         NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: view.topAnchor),
-            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+            webView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            webView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
+            webView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
         ])
 
         guard let indexURL = BundleHelper.shared.shareEditorIndexURL,
@@ -414,12 +415,21 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
                   matchesIdentity(returnedTrack["album"], track.album) else {
                 throw LyricsShareEditorError.invalidResponse("歌词服务返回的曲目身份与当前歌曲不一致。")
             }
-            object["track"] = [
+            var trackObject: [String: Any] = [
                 "trackId": track.trackId,
                 "title": track.title,
                 "artist": track.artist,
                 "album": track.album
             ]
+            if let artworkDataURL = LyricsShareEditorTrackResolver.currentArtworkDataURL(matching: track) {
+                trackObject["coverUrl"] = artworkDataURL
+                object["track"] = trackObject
+                if let encodedDocument = try? JSONSerialization.data(withJSONObject: object),
+                   encodedDocument.count > LyricsShareEditorPNG.maximumBytes {
+                    trackObject.removeValue(forKey: "coverUrl")
+                }
+            }
+            object["track"] = trackObject
             try injectDocument(object)
         } catch {
             showError(error.localizedDescription)
@@ -450,9 +460,15 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
             let projectEncoded = project.base64EncodedString()
             projectScript = """
             try {
-              window.ShareEditor.restoreState(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(
+              const project = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(
                 Uint8Array.from(atob('\(projectEncoded)'), character => character.charCodeAt(0))
-              )));
+              ));
+              if (editorDocument.track && editorDocument.track.coverUrl
+                  && project.document && project.document.track
+                  && project.document.track.trackId === editorDocument.track.trackId) {
+                project.document.track.coverUrl = editorDocument.track.coverUrl;
+              }
+              window.ShareEditor.restoreState(project);
             } catch (error) {
               projectRestored = false;
               projectError = String(error && error.message ? error.message : error);
@@ -472,7 +488,8 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
         (() => {
           const bytes = Uint8Array.from(atob('\(encoded)'), character => character.charCodeAt(0));
           if (!window.ShareEditor) return false;
-          window.ShareEditor.loadDocument(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+          const editorDocument = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+          window.ShareEditor.loadDocument(editorDocument);
           let projectRestored = true;
           let projectError = '';
           \(projectScript)
