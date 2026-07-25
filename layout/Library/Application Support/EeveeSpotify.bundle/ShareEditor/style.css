@@ -927,8 +927,8 @@ dialog::backdrop {
   #preview-canvas {
     width: auto;
     inline-size: auto;
-    height: 100%;
-    block-size: 100%;
+    height: auto;
+    block-size: auto;
     min-width: 0;
     min-inline-size: 0;
     max-width: calc(100vw - 24px);

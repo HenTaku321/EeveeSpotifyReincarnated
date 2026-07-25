@@ -31,6 +31,7 @@
   const MAX_IMAGE_BYTES = State.MAX_IMAGE_BYTES;
   const MAX_PROJECT_BYTES = State.MAX_PROJECT_BYTES;
   const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
+  const MAX_PREVIEW_CSS_SIZE = 580;
   const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
   const DEMO_DOCUMENT = Object.freeze({
     source: "github",
@@ -325,6 +326,23 @@
     });
   }
 
+  function calculatePreviewSquareSize(stageWidth, stageHeight, horizontalInset, verticalInset, maximumSize) {
+    const width = Number(stageWidth);
+    const height = Number(stageHeight);
+    const inlineInset = Number(horizontalInset);
+    const blockInset = Number(verticalInset);
+    const limit = maximumSize === undefined ? MAX_PREVIEW_CSS_SIZE : Number(maximumSize);
+    if (![width, height, inlineInset, blockInset, limit].every(Number.isFinite) || limit <= 0) return 0;
+    const availableWidth = Math.max(0, width - Math.max(0, inlineInset));
+    const availableHeight = Math.max(0, height - Math.max(0, blockInset));
+    return Math.max(0, Math.floor(Math.min(availableWidth, availableHeight, limit)));
+  }
+
+  function cssPixelValue(value) {
+    const number = Number.parseFloat(value);
+    return Number.isFinite(number) ? number : 0;
+  }
+
   class EditorController {
     constructor(documentInput) {
       this.elements = this.collectElements();
@@ -338,19 +356,57 @@
         applyDocument: (document) => this.loadDocument(document),
       });
       this.bindEvents();
+      this.bindPreviewSizing();
       this.renderAll({ rebuildLyrics: true });
     }
 
     collectElements() {
       const ids = [
         "document-source", "undo-button", "redo-button", "mobile-project-button", "load-button", "project-menu-button", "project-input",
-        "selection-status", "selection-limit", "lyrics-list", "track-summary", "status-output", "preview-canvas",
+        "selection-status", "selection-limit", "lyrics-list", "track-summary", "status-output", "canvas-stage", "preview-canvas",
         "export-canvas", "download-button", "share-button", "background-color", "text-color", "tint-color",
         "caps-toggle", "background-input", "background-file-name", "remove-background", "cover-input",
         "cover-file-name", "remove-cover", "sticker-palette", "sticker-input", "sticker-summary", "delete-sticker",
         "source-dialog", "source-form", "close-source-dialog", "cancel-source-dialog",
       ];
       return Object.fromEntries(ids.map((id) => [id.replace(/-([a-z])/g, (_match, character) => character.toUpperCase()), document.getElementById(id)]));
+    }
+
+    bindPreviewSizing() {
+      const update = () => this.syncPreviewCanvasSize();
+      update();
+      if (typeof root.ResizeObserver === "function") {
+        this.previewResizeObserver = new root.ResizeObserver(update);
+        this.previewResizeObserver.observe(this.elements.canvasStage);
+      } else {
+        root.addEventListener("resize", update);
+      }
+      if (typeof root.requestAnimationFrame === "function") root.requestAnimationFrame(update);
+    }
+
+    syncPreviewCanvasSize() {
+      const stage = this.elements.canvasStage;
+      const canvas = this.elements.previewCanvas;
+      const computed = typeof root.getComputedStyle === "function" ? root.getComputedStyle(stage) : null;
+      const horizontalInset = computed
+        ? cssPixelValue(computed.paddingLeft) + cssPixelValue(computed.paddingRight)
+        : 0;
+      const verticalInset = computed
+        ? cssPixelValue(computed.paddingTop) + cssPixelValue(computed.paddingBottom)
+        : 0;
+      const size = calculatePreviewSquareSize(
+        stage.clientWidth,
+        stage.clientHeight,
+        horizontalInset,
+        verticalInset,
+      );
+      if (size <= 0) return false;
+      const sizeValue = `${size}px`;
+      canvas.style.width = sizeValue;
+      canvas.style.inlineSize = sizeValue;
+      canvas.style.height = sizeValue;
+      canvas.style.blockSize = sizeValue;
+      return true;
     }
 
     bindEvents() {
@@ -910,6 +966,7 @@
     ENDPOINT,
     DEMO_DOCUMENT,
     createDocumentGateway,
+    calculatePreviewSquareSize,
     safeImageSource,
     sanitizeFilename,
     publicApi,
