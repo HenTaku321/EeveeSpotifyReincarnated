@@ -92,3 +92,12 @@ test("standalone editors expose module-owned service configuration", () => {
   assert.doesNotMatch(shareController, /包含 EeveeSpotify\.bundle/);
   assert.doesNotMatch(timelineController, /包含 EeveeSpotify\.bundle/);
 });
+
+test("standalone entry hooks deduplicate the frozen Eevee-hosted actions", () => {
+  const hooks = read("Sources/EeveeSpotify/ShareEditor/LyricsEditorEntryHooks.x.swift");
+  assert.match(hooks, /mitm-lyrics-studio\.share/);
+  assert.match(hooks, /mitm-lyrics-studio\.timeline/);
+  assert.match(hooks, /LyricsEditorEntryIdentity\.value\(for: button\.accessibilityLabel\)/);
+  assert.match(hooks, /deduplicateCardEntries/);
+  assert.match(hooks, /deduplicatedFullscreenEntries/);
+});

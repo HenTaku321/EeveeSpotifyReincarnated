@@ -10,6 +10,19 @@ private var lyricsCardEntryAssociationKey: UInt8 = 0
 private var lyricsCardEntryRetryAssociationKey: UInt8 = 0
 private var lyricsFullscreenEntryAssociationKey: UInt8 = 0
 
+private enum LyricsEditorEntryIdentity {
+    static let share = "mitm-lyrics-studio.share"
+    static let timeline = "mitm-lyrics-studio.timeline"
+
+    static func value(for label: String?) -> String? {
+        switch label {
+        case "歌词分享卡片": return share
+        case "歌词内容与时间轴": return timeline
+        default: return nil
+        }
+    }
+}
+
 private struct LyricsHeaderButtonStyle {
     let size: CGSize
     let alpha: CGFloat
@@ -47,6 +60,7 @@ private final class LyricsEditorEntryButton: UIButton {
         translatesAutoresizingMaskIntoConstraints = false
         setImage(UIImage(systemName: symbol), for: .normal)
         self.accessibilityLabel = accessibilityLabel
+        accessibilityIdentifier = LyricsEditorEntryIdentity.value(for: accessibilityLabel)
         accessibilityHint = "打开当前歌曲的\(accessibilityLabel)"
         addTarget(self, action: #selector(didTap), for: .touchUpInside)
     }
@@ -83,9 +97,13 @@ private final class LyricsEditorEntryButton: UIButton {
 
 private enum LyricsEditorEntryInstaller {
     static func attachCardEntries(to header: UIView) {
-        guard objc_getAssociatedObject(header, &lyricsCardEntryAssociationKey) == nil else { return }
         guard let stack = cardHeaderStack(in: header) else {
             scheduleCardEntryRetry(for: header)
+            return
+        }
+        guard objc_getAssociatedObject(header, &lyricsCardEntryAssociationKey) == nil else { return }
+        if containsBothEntries(in: stack) {
+            markCardEntriesAttached(to: header)
             return
         }
         stack.layoutIfNeeded()
@@ -111,8 +129,10 @@ private enum LyricsEditorEntryInstaller {
         let previousCount = stack.arrangedSubviews.count
         stack.addArrangedSubview(shareButton)
         stack.addArrangedSubview(timelineButton)
-        objc_setAssociatedObject(header, &lyricsCardEntryAssociationKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        objc_setAssociatedObject(header, &lyricsCardEntryRetryAssociationKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        markCardEntriesAttached(to: header)
+        DispatchQueue.main.async { [weak stack] in
+            if let stack = stack { deduplicateCardEntries(in: stack) }
+        }
         writeDebugLog(
             "[LyricsEditor] card entries attached: arrangedSubviews \(previousCount)->\(stack.arrangedSubviews.count)"
         )
@@ -120,6 +140,11 @@ private enum LyricsEditorEntryInstaller {
 
     static func attachFullscreenEntries(to controller: UIViewController) {
         guard objc_getAssociatedObject(controller, &lyricsFullscreenEntryAssociationKey) == nil else { return }
+
+        if containsBothEntries(in: controller.navigationItem.rightBarButtonItems ?? []) {
+            objc_setAssociatedObject(controller, &lyricsFullscreenEntryAssociationKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            return
+        }
 
         let shareButton = makeButton(
             symbol: "square.and.arrow.up",
@@ -139,6 +164,55 @@ private enum LyricsEditorEntryInstaller {
             UIBarButtonItem(customView: shareButton)
         ]
         objc_setAssociatedObject(controller, &lyricsFullscreenEntryAssociationKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        DispatchQueue.main.async { [weak controller] in
+            guard let controller = controller else { return }
+            controller.navigationItem.rightBarButtonItems = deduplicatedFullscreenEntries(
+                controller.navigationItem.rightBarButtonItems ?? []
+            )
+        }
+    }
+
+    private static func markCardEntriesAttached(to header: UIView) {
+        objc_setAssociatedObject(header, &lyricsCardEntryAssociationKey, true, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        objc_setAssociatedObject(header, &lyricsCardEntryRetryAssociationKey, nil, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
+    private static func entryIdentity(in view: UIView) -> String? {
+        if let button = view as? UIButton {
+            return button.accessibilityIdentifier
+                ?? LyricsEditorEntryIdentity.value(for: button.accessibilityLabel)
+        }
+        return view.subviews.lazy.compactMap(entryIdentity).first
+    }
+
+    private static func containsBothEntries(in view: UIView) -> Bool {
+        let identities = Set(view.subviews.compactMap(entryIdentity))
+        return identities.contains(LyricsEditorEntryIdentity.share)
+            && identities.contains(LyricsEditorEntryIdentity.timeline)
+    }
+
+    private static func containsBothEntries(in items: [UIBarButtonItem]) -> Bool {
+        let identities = Set(items.compactMap { $0.customView.flatMap(entryIdentity) })
+        return identities.contains(LyricsEditorEntryIdentity.share)
+            && identities.contains(LyricsEditorEntryIdentity.timeline)
+    }
+
+    private static func deduplicateCardEntries(in stack: UIStackView) {
+        var seen = Set<String>()
+        for view in stack.arrangedSubviews {
+            guard let identity = entryIdentity(in: view) else { continue }
+            if seen.insert(identity).inserted { continue }
+            stack.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+    }
+
+    private static func deduplicatedFullscreenEntries(_ items: [UIBarButtonItem]) -> [UIBarButtonItem] {
+        var seen = Set<String>()
+        return items.filter { item in
+            guard let identity = item.customView.flatMap(entryIdentity) else { return true }
+            return seen.insert(identity).inserted
+        }
     }
 
     private static func makeButton(
