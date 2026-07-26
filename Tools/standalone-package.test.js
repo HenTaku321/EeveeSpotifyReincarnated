@@ -76,3 +76,19 @@ test("shared player bridge selects the standalone C module at compile time", () 
   assert.match(playerBridge, /import MITMLyricsStudioC/);
   assert.match(playerBridge, /#else\s+import EeveeSpotifyC\s+#endif/s);
 });
+
+test("standalone editors expose module-owned service configuration", () => {
+  const configuration = read("Sources/EeveeSpotify/ShareEditor/LyricsShareEditorConfiguration.swift");
+  const launcher = read("Sources/EeveeSpotify/ShareEditor/LyricsShareEditorLauncher.swift");
+  const shareController = read("Sources/EeveeSpotify/ShareEditor/LyricsShareEditorViewController.swift");
+  const timelineController = read("Sources/EeveeSpotify/ShareEditor/LyricsTimelineEditorViewController.swift");
+
+  assert.match(configuration, /static func validated\(serverURL: String, token rawToken: String\)/);
+  assert.match(launcher, /enum LyricsEditorServiceConfigurationPresenter/);
+  assert.match(launcher, /UserDefaults\.shareEditorServerURL =/);
+  assert.match(launcher, /UserDefaults\.shareEditorToken =/);
+  assert.match(shareController, /#selector\(configureLyricsService\)/);
+  assert.match(timelineController, /#selector\(configureLyricsService\)/);
+  assert.doesNotMatch(shareController, /包含 EeveeSpotify\.bundle/);
+  assert.doesNotMatch(timelineController, /包含 EeveeSpotify\.bundle/);
+});

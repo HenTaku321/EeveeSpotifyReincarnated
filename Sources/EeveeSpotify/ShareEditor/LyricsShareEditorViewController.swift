@@ -77,6 +77,13 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
             target: self,
             action: #selector(closeEditor)
         )
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            image: UIImage(systemName: "gearshape"),
+            style: .plain,
+            target: self,
+            action: #selector(configureLyricsService)
+        )
+        navigationItem.rightBarButtonItem?.accessibilityLabel = "歌词服务设置"
 
         webView.navigationDelegate = self
         webView.scrollView.contentInsetAdjustmentBehavior = .never
@@ -93,7 +100,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
 
         guard let indexURL = BundleHelper.shared.shareEditorIndexURL,
               let directoryURL = BundleHelper.shared.shareEditorDirectoryURL else {
-            showError("编辑器资源未安装。请重新安装包含 EeveeSpotify.bundle 的构建。")
+            showError("编辑器资源未安装。请重新安装完整的歌词编辑器插件。")
             return
         }
         allowedReadDirectory = directoryURL.standardizedFileURL
@@ -243,6 +250,13 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
     @objc private func retry() {
         hideError()
         beginTrackLoad()
+    }
+
+    @objc private func configureLyricsService() {
+        LyricsEditorServiceConfigurationPresenter.present(from: self) { [weak self] in
+            guard let self = self, !self.projectReady else { return }
+            self.retry()
+        }
     }
 
     private func configureStatusView() {

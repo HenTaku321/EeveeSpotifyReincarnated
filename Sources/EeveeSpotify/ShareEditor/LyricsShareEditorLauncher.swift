@@ -38,6 +38,56 @@ private enum LyricsEditorModalPresenter {
     }
 }
 
+enum LyricsEditorServiceConfigurationPresenter {
+    static func present(from viewController: UIViewController, onSave: @escaping () -> Void) {
+        guard viewController.presentedViewController == nil else { return }
+
+        let alert = UIAlertController(
+            title: "歌词服务",
+            message: "访问令牌只会通过原生 HTTPS header 发送。",
+            preferredStyle: .alert
+        )
+        alert.addTextField { field in
+            field.placeholder = "https://lyrics.example.com"
+            field.text = UserDefaults.shareEditorServerURL
+            field.autocapitalizationType = .none
+            field.autocorrectionType = .no
+            field.keyboardType = .URL
+        }
+        alert.addTextField { field in
+            field.placeholder = "可选：X-MITM-Lyrics-Token"
+            field.text = UserDefaults.shareEditorToken
+            field.isSecureTextEntry = true
+            field.autocapitalizationType = .none
+            field.autocorrectionType = .no
+        }
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "保存", style: .default) { [weak alert, weak viewController] _ in
+            let serverURL = alert?.textFields?.first?.text ?? ""
+            let token = alert?.textFields?.dropFirst().first?.text ?? ""
+            do {
+                _ = try LyricsShareEditorConfiguration.validated(serverURL: serverURL, token: token)
+                UserDefaults.shareEditorServerURL = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                UserDefaults.shareEditorToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+                onSave()
+            } catch {
+                DispatchQueue.main.async {
+                    guard let viewController = viewController,
+                          viewController.presentedViewController == nil else { return }
+                    let errorAlert = UIAlertController(
+                        title: "配置无效",
+                        message: error.localizedDescription,
+                        preferredStyle: .alert
+                    )
+                    errorAlert.addAction(UIAlertAction(title: "好", style: .default))
+                    viewController.present(errorAlert, animated: true)
+                }
+            }
+        })
+        viewController.present(alert, animated: true)
+    }
+}
+
 struct EeveeShareEditorSettingsView: View {
     let navigationController: UINavigationController
     @State private var serverURL: String

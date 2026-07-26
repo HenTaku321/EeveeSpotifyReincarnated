@@ -9,8 +9,15 @@ struct LyricsShareEditorConfiguration {
     let token: String
 
     static func current() throws -> LyricsShareEditorConfiguration {
-        let rawURL = UserDefaults.shareEditorServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let token = UserDefaults.shareEditorToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        try validated(
+            serverURL: UserDefaults.shareEditorServerURL,
+            token: UserDefaults.shareEditorToken
+        )
+    }
+
+    static func validated(serverURL: String, token rawToken: String) throws -> LyricsShareEditorConfiguration {
+        let rawURL = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let token = rawToken.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !rawURL.isEmpty else {
             throw LyricsShareEditorError.configuration("请先在歌词编辑器设置中填写歌词服务地址。")
         }

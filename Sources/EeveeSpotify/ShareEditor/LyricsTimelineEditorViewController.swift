@@ -61,6 +61,13 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
             target: self,
             action: #selector(closeEditor)
         )
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            image: UIImage(systemName: "gearshape"),
+            style: .plain,
+            target: self,
+            action: #selector(configureLyricsService)
+        )
+        navigationItem.rightBarButtonItem?.accessibilityLabel = "歌词服务设置"
         webView.navigationDelegate = self
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.translatesAutoresizingMaskIntoConstraints = false
@@ -75,7 +82,7 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
 
         guard let indexURL = BundleHelper.shared.timelineEditorIndexURL,
               let directoryURL = BundleHelper.shared.timelineEditorDirectoryURL else {
-            showError("时间轴编辑器资源未安装。请重新安装包含 EeveeSpotify.bundle 的构建。")
+            showError("时间轴编辑器资源未安装。请重新安装完整的歌词编辑器插件。")
             return
         }
         allowedReadDirectory = directoryURL.standardizedFileURL
@@ -178,6 +185,14 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
     @objc private func retry() {
         hideError()
         beginTrackLoad()
+    }
+
+    @objc private func configureLyricsService() {
+        LyricsEditorServiceConfigurationPresenter.present(from: self) { [weak self] in
+            guard let self = self else { return }
+            self.activeConfiguration = try? LyricsShareEditorConfiguration.current()
+            if !self.editorReady { self.retry() }
+        }
     }
 
     @objc private func closeEditor() {
