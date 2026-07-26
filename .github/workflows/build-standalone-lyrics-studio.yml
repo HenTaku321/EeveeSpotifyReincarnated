@@ -1,0 +1,139 @@
+name: Build standalone MITM Lyrics Studio
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - standalone-editor-work
+    paths:
+      - "Sources/MITMLyricsStudio/**"
+      - "Sources/MITMLyricsStudioC/**"
+      - "Sources/EeveeSpotify/ShareEditor/**"
+      - "layout/Library/Application Support/EeveeSpotify.bundle/ShareEditor/**"
+      - "layout/Library/Application Support/EeveeSpotify.bundle/TimelineEditor/**"
+      - "layout-standalone/**"
+      - "Makefile.standalone"
+      - "MITMLyricsStudio.plist"
+      - "control.standalone"
+      - "Tools/standalone-package.test.js"
+      - "Tools/verify-standalone-editor.sh"
+      - ".github/workflows/build-standalone-lyrics-studio.yml"
+
+permissions:
+  contents: read
+
+env:
+  THEOS: ${{ github.workspace }}/theos
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.2.0"
+
+      - name: Checkout Theos
+        uses: actions/checkout@v4
+        with:
+          repository: theos/theos
+          path: ${{ github.workspace }}/theos
+          submodules: recursive
+
+      - name: Install package tools
+        run: |
+          brew install make dpkg ldid zip
+          echo "$(brew --prefix make)/libexec/gnubin" >> "$GITHUB_PATH"
+
+      - name: Verify source contracts
+        run: ./Tools/verify-standalone-editor.sh
+
+      - name: Fetch pinned Orion runtime
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/Orion_1.0.2.zip"
+          package="$RUNNER_TEMP/dev.theos.orion14_1.0.2_iphoneos-arm64.deb"
+          curl --fail --location --retry 3 --silent --show-error \
+            --proto '=https' --proto-redir '=https' \
+            --output "$archive" \
+            'https://github.com/theos/orion/releases/download/1.0.2/Orion_1.0.2.zip'
+          printf '%s  %s\n' \
+            '67ea96da8983a792bc9e5549472c2e597b84024c66bce888ce19e7940e413e55' \
+            "$archive" | shasum -a 256 -c -
+          unzip -q "$archive" 'dev.theos.orion14_1.0.2_iphoneos-arm64.deb' -d "$RUNNER_TEMP"
+          printf '%s  %s\n' \
+            '5389d02f0f2e74d3cfbeca88739a85ba81f36a0294439559c89d7a76e6bee21e' \
+            "$package" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/orion-root"
+          dpkg-deb -x "$package" "$RUNNER_TEMP/orion-root"
+          framework="$RUNNER_TEMP/orion-root/var/jb/Library/Frameworks/Orion.framework"
+          test -x "$framework/Orion"
+          echo "ORION_FRAMEWORK=$framework" >> "$GITHUB_ENV"
+
+      - name: Build rootless package
+        run: |
+          set -euo pipefail
+          cp control.standalone control
+          make -f Makefile.standalone clean
+          THEOS_PACKAGE_SCHEME=rootless make -f Makefile.standalone package FINALPACKAGE=1
+          deb="$(find packages -maxdepth 1 -type f -name 'com.mitmlyrics.studio_*.deb' -print | sort | tail -n 1)"
+          test -n "$deb"
+          echo "DEB_PATH=$deb" >> "$GITHUB_ENV"
+
+      - name: Verify and stage artifacts
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/deb-root" "$RUNNER_TEMP/trollfools-root" Outputs
+          mkdir -p "$RUNNER_TEMP/deb-root" "$RUNNER_TEMP/trollfools-root" Outputs
+          dpkg-deb -x "$DEB_PATH" "$RUNNER_TEMP/deb-root"
+          dylib="$(find "$RUNNER_TEMP/deb-root" -type f -name 'MITMLyricsStudio.dylib' -print -quit)"
+          bundle="$(find "$RUNNER_TEMP/deb-root" -type d -name 'MITMLyricsStudio.bundle' -print -quit)"
+          test -n "$dylib"
+          test -f "$bundle/ShareEditor/index.html"
+          test -f "$bundle/TimelineEditor/index.html"
+          test -x "$ORION_FRAMEWORK/Orion"
+          cp "$dylib" "$RUNNER_TEMP/trollfools-root/MITMLyricsStudio.dylib"
+          cp -R "$bundle" "$RUNNER_TEMP/trollfools-root/MITMLyricsStudio.bundle"
+          cp -R "$ORION_FRAMEWORK" "$RUNNER_TEMP/trollfools-root/Orion.framework"
+          archive="$GITHUB_WORKSPACE/Outputs/MITMLyricsStudio-trollfools.zip"
+          (cd "$RUNNER_TEMP/trollfools-root" && zip -qry "$archive" .)
+          zip -T "$archive"
+          cp "$DEB_PATH" Outputs/
+          python3 - "$archive" <<'PY'
+          import pathlib
+          import sys
+          import zipfile
+
+          archive = pathlib.Path(sys.argv[1])
+          expected = {"MITMLyricsStudio.dylib", "MITMLyricsStudio.bundle", "Orion.framework"}
+          required = {
+              "MITMLyricsStudio.dylib",
+              "MITMLyricsStudio.bundle/ShareEditor/index.html",
+              "MITMLyricsStudio.bundle/TimelineEditor/index.html",
+              "Orion.framework/Orion",
+          }
+          with zipfile.ZipFile(archive) as package:
+              names = {entry.filename for entry in package.infolist() if not entry.is_dir()}
+          top = {pathlib.PurePosixPath(name).parts[0] for name in names}
+          if top != expected:
+              raise SystemExit(f"unexpected top-level payloads: {sorted(top)}")
+          missing = sorted(required - names)
+          if missing:
+              raise SystemExit(f"missing payloads: {missing}")
+          if any("Eevee" in name for name in names):
+              raise SystemExit("standalone archive contains a host-specific payload")
+          PY
+
+      - name: Upload standalone package
+        uses: actions/upload-artifact@v4
+        with:
+          name: mitm-lyrics-studio
+          path: Outputs/*
+          if-no-files-found: error
+          retention-days: 14

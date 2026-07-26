@@ -1,0 +1,9 @@
+Package: com.mitmlyrics.studio
+Name: MITM Lyrics Studio
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Standalone GitHub-backed lyrics sharing and timeline editor for Spotify
+Maintainer: HenTaku
+Author: HenTaku
+Section: Tweaks
+Depends: ${ORION}, firmware (>= 14.0)

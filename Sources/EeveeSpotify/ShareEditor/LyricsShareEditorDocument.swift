@@ -91,7 +91,11 @@ enum LyricsShareEditorTrackResolver {
     static func currentCandidate() throws -> LyricsShareEditorTrackCandidate {
         dispatchPrecondition(condition: .onQueue(DispatchQueue.main))
 
+        #if MITM_LYRICS_STANDALONE
+        let playerTrack = statefulPlayer?.currentTrack()
+        #else
         let playerTrack = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack
+        #endif
         let observedTrack = LyricsTimelinePlayerBridge.shared.capturedTrackCandidate()
         let nowPlaying = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
         let liveTrackID = trimmed(playerTrack?.trackIdentifier)
@@ -171,7 +175,12 @@ enum LyricsShareEditorTrackResolver {
 
     static func currentArtworkRemoteURL(matching track: LyricsShareEditorTrack) -> URL? {
         dispatchPrecondition(condition: .onQueue(DispatchQueue.main))
-        guard let playerTrack = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack,
+        #if MITM_LYRICS_STANDALONE
+        let currentPlayerTrack = statefulPlayer?.currentTrack()
+        #else
+        let currentPlayerTrack = statefulPlayer?.currentTrack() ?? nowPlayingScrollViewController?.loadedTrack
+        #endif
+        guard let playerTrack = currentPlayerTrack,
               trimmed(playerTrack.trackIdentifier) == track.trackId,
               let object = playerTrack as? NSObject,
               object.responds(to: NSSelectorFromString("metadata")) else {

@@ -1,0 +1,4 @@
+module MITMLyricsStudioC {
+    umbrella "."
+    export *
+}

@@ -1,6 +1,10 @@
 import Foundation
 import ObjectiveC
+#if MITM_LYRICS_STANDALONE
+import MITMLyricsStudioC
+#else
 import EeveeSpotifyC
+#endif
 
 struct LyricsTimelinePlayerSnapshot {
     let trackId: String

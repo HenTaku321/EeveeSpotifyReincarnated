@@ -12,7 +12,7 @@ struct LyricsShareEditorConfiguration {
         let rawURL = UserDefaults.shareEditorServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let token = UserDefaults.shareEditorToken.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !rawURL.isEmpty else {
-            throw LyricsShareEditorError.configuration("请先在 EeveeSpotify 设置中填写歌词服务地址。")
+            throw LyricsShareEditorError.configuration("请先在歌词编辑器设置中填写歌词服务地址。")
         }
 
         guard var components = URLComponents(string: rawURL),
@@ -54,7 +54,13 @@ extension UserDefaults {
     private static let shareEditorTokenKey = "lyricsShareEditorToken"
 
     static var shareEditorServerURL: String {
-        get { container.string(forKey: shareEditorServerURLKey) ?? "" }
+        get {
+            #if MITM_LYRICS_STANDALONE
+            return container.string(forKey: shareEditorServerURLKey) ?? "https://cpa.customdom.eu.org:7474"
+            #else
+            return container.string(forKey: shareEditorServerURLKey) ?? ""
+            #endif
+        }
         set { container.set(newValue, forKey: shareEditorServerURLKey) }
     }
 
