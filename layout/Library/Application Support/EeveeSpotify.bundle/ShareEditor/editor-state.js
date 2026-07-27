@@ -573,10 +573,25 @@
         if (action.kind === "background") media.useTrackArtworkAsBackground = false;
         return assertStateResourceBudget({ ...state, media });
       }
+      case "useTrackArtwork": {
+        if (!state.document.track.coverUrl || (action.kind !== "background" && action.kind !== "cover")) return state;
+        const media = { ...state.media };
+        if (action.kind === "background") {
+          if (!media.background && media.useTrackArtworkAsBackground) return state;
+          media.background = null;
+          media.useTrackArtworkAsBackground = true;
+        } else {
+          if (!media.cover) return state;
+          media.cover = null;
+        }
+        return assertStateResourceBudget({ ...state, media });
+      }
       case "addSticker": {
         if (state.stickers.length >= MAX_STICKERS) return state;
         const sticker = normalizeSticker(action.sticker);
         if (state.stickers.some((item) => item.id === sticker.id)) return state;
+        if (sticker.stickerID === "track-artwork"
+          && state.stickers.some((item) => item.stickerID === "track-artwork")) return state;
         return assertStateResourceBudget({ ...state, stickers: state.stickers.concat(sticker), activeStickerId: sticker.id });
       }
       case "replaceSticker": {

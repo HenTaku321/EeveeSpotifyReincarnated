@@ -38,6 +38,12 @@
   const MAX_PROJECT_BYTES = State.MAX_PROJECT_BYTES;
   const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
   const MAX_PREVIEW_CSS_SIZE = 560;
+  const SOURCE_LOGO_URL = "./source-logo";
+  const INTERMEDIATE_INSPECTOR_MIN_SIZE = 144;
+  const INTERMEDIATE_PREVIEW_MIN_SIZE = 180;
+  const INTERMEDIATE_SPLITTER_SIZE = 12;
+  const INTERMEDIATE_INSPECTOR_DEFAULT_SIZE = 192;
+  const INTERMEDIATE_INSPECTOR_KEY_STEP = 16;
   const EXPORT_SCALES = Object.freeze({ 891: 3, 1782: 6, 2673: 9 });
   const DEFAULT_EXPORT_PIXELS = 1782;
   const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -257,18 +263,20 @@
       const coverSource = state.media.cover && state.media.cover.src
         ? state.media.cover.src
         : state.document.track.coverUrl;
-      const wanted = new Set([backgroundSource, coverSource, ...state.stickers.map((sticker) => sticker.imageData)].filter(Boolean));
+      const wanted = new Set([SOURCE_LOGO_URL, backgroundSource, coverSource, ...state.stickers.map((sticker) => sticker.imageData)].filter(Boolean));
       Array.from(this.cache.keys()).forEach((source) => {
         if (!wanted.has(source)) this.release(source);
       });
-      const [background, cover, stickerEntries] = await Promise.all([
+      const [background, cover, sourceLogo, stickerEntries] = await Promise.all([
         this.get(backgroundSource),
         this.get(coverSource),
+        this.get(SOURCE_LOGO_URL),
         Promise.all(state.stickers.map(async (sticker) => [sticker.id, await this.get(sticker.imageData)])),
       ]);
       return {
         background,
         cover,
+        sourceLogo,
         coverLuma: this.coverLuma(coverSource, cover),
         stickers: new Map(stickerEntries.filter((entry) => entry[1])),
       };
@@ -387,6 +395,16 @@
     return Math.max(0, Math.floor(Math.min(availableWidth, availableHeight, limit)));
   }
 
+  function resolveIntermediateInspectorSize(gridHeight, requestedSize) {
+    const height = Math.max(0, Math.floor(Number(gridHeight) || 0));
+    const min = INTERMEDIATE_INSPECTOR_MIN_SIZE;
+    const max = Math.max(min, height - INTERMEDIATE_PREVIEW_MIN_SIZE - INTERMEDIATE_SPLITTER_SIZE);
+    const requested = Number.isFinite(Number(requestedSize))
+      ? Number(requestedSize)
+      : INTERMEDIATE_INSPECTOR_DEFAULT_SIZE;
+    return { size: Math.round(Math.min(max, Math.max(min, requested))), min, max };
+  }
+
   function cssPixelValue(value) {
     const number = Number.parseFloat(value);
     return Number.isFinite(number) ? number : 0;
@@ -400,14 +418,26 @@
     return { pixels, scale: EXPORT_SCALES[pixels] };
   }
 
+  function replaceChildrenPreservingScroll(container, ...children) {
+    const scrollTop = Math.max(0, Number(container.scrollTop) || 0);
+    const scrollLeft = Math.max(0, Number(container.scrollLeft) || 0);
+    container.replaceChildren(...children);
+    const maxScrollTop = Math.max(0, (Number(container.scrollHeight) || 0) - (Number(container.clientHeight) || 0));
+    const maxScrollLeft = Math.max(0, (Number(container.scrollWidth) || 0) - (Number(container.clientWidth) || 0));
+    container.scrollTop = Math.min(scrollTop, maxScrollTop);
+    container.scrollLeft = Math.min(scrollLeft, maxScrollLeft);
+  }
+
   class EditorController {
     constructor(documentInput) {
       this.elements = this.collectElements();
       this.imageCache = new ImageCache();
       this.history = State.createHistory(State.createEditorState(documentInput));
-      this.resources = { background: null, cover: null, stickers: new Map() };
+      this.resources = { background: null, cover: null, sourceLogo: null, stickers: new Map() };
       this.renderGeneration = 0;
       this.gesture = null;
+      this.inspectorResizeGesture = null;
+      this.intermediateInspectorSize = INTERMEDIATE_INSPECTOR_DEFAULT_SIZE;
       // 行编辑展开是纯局部 UI 状态：不进 history，也不参与序列化。
       this.expandedLineIndex = null;
       this.repositoryPath = "lyrics";
@@ -424,9 +454,9 @@
     collectElements() {
       const ids = [
         "track-name", "undo-button", "redo-button", "mobile-project-button", "load-button", "project-menu-button", "project-input",
-        "selection-limit", "lyrics-list", "lyrics-panel-toggle", "inspector-panel-toggle", "track-summary", "status-output", "canvas-stage", "preview-canvas", "template-switch",
+        "editor-grid", "selection-limit", "lyrics-list", "lyrics-panel-toggle", "inspector-panel-toggle", "inspector-resize-handle", "track-summary", "status-output", "canvas-stage", "preview-canvas", "template-switch",
         "export-canvas", "export-resolution", "export-size", "download-button", "share-button", "background-color", "text-color", "tint-color",
-        "caps-toggle", "background-input", "background-file-name", "remove-background", "cover-input",
+        "caps-toggle", "track-artwork-actions", "use-artwork-background", "use-artwork-cover", "add-artwork-sticker", "background-input", "background-file-name", "remove-background", "cover-input",
         "cover-file-name", "remove-cover", "sticker-palette", "sticker-input", "sticker-summary", "delete-sticker",
         "source-dialog", "source-form", "close-source-dialog", "cancel-source-dialog", "repository-path",
         "repository-refresh", "repository-up", "repository-search", "repository-list", "repository-status",
@@ -435,11 +465,15 @@
     }
 
     bindPreviewSizing() {
-      const update = () => this.syncPreviewCanvasSize();
+      const update = () => {
+        this.setIntermediateInspectorSize(this.intermediateInspectorSize);
+        this.syncPreviewCanvasSize();
+      };
       update();
       if (typeof root.ResizeObserver === "function") {
         this.previewResizeObserver = new root.ResizeObserver(update);
         this.previewResizeObserver.observe(this.elements.canvasStage);
+        this.previewResizeObserver.observe(this.elements.editorGrid);
       } else {
         root.addEventListener("resize", update);
       }
@@ -501,11 +535,19 @@
       e.projectInput.addEventListener("change", (event) => this.openProject(event));
       e.lyricsPanelToggle.addEventListener("click", () => this.toggleDesktopPanel("lyrics"));
       e.inspectorPanelToggle.addEventListener("click", () => this.toggleDesktopPanel("inspector"));
+      e.inspectorResizeHandle.addEventListener("pointerdown", (event) => this.beginIntermediateInspectorResize(event));
+      e.inspectorResizeHandle.addEventListener("pointermove", (event) => this.moveIntermediateInspectorResize(event));
+      e.inspectorResizeHandle.addEventListener("pointerup", (event) => this.endIntermediateInspectorResize(event));
+      e.inspectorResizeHandle.addEventListener("pointercancel", (event) => this.endIntermediateInspectorResize(event));
+      e.inspectorResizeHandle.addEventListener("keydown", (event) => this.keyboardIntermediateInspectorResize(event));
       e.exportResolution.addEventListener("change", () => this.syncExportResolution());
       e.downloadButton.addEventListener("click", () => this.exportImage("save"));
       e.shareButton.addEventListener("click", () => this.exportImage("share"));
       e.backgroundInput.addEventListener("change", (event) => this.setLocalMedia("background", event));
       e.coverInput.addEventListener("change", (event) => this.setLocalMedia("cover", event));
+      e.useArtworkBackground.addEventListener("click", () => this.useTrackArtwork("background"));
+      e.useArtworkCover.addEventListener("click", () => this.useTrackArtwork("cover"));
+      e.addArtworkSticker.addEventListener("click", () => this.addTrackArtworkSticker());
       e.removeBackground.addEventListener("click", () => this.execute({ type: "setMedia", kind: "background", value: null }));
       e.removeCover.addEventListener("click", () => this.execute({ type: "setMedia", kind: "cover", value: null }));
       e.stickerInput.addEventListener("change", (event) => this.addLocalSticker(event));
@@ -521,6 +563,9 @@
 
       document.querySelectorAll(".mobile-tool-dock button[data-mobile-tool]").forEach((button) => {
         button.addEventListener("click", () => this.activateMobileTool(button.dataset.mobileTool));
+      });
+      document.querySelectorAll(".desktop-tool-rail button[data-desktop-tool]").forEach((button) => {
+        button.addEventListener("click", () => this.openDesktopTool(button.dataset.desktopTool, button));
       });
       document.querySelectorAll("[data-control]").forEach((control) => {
         control.addEventListener("click", (event) => {
@@ -560,6 +605,8 @@
       this.imageCache.clear();
       this.expandedLineIndex = null;
       this.history.reset(State.createEditorState(document));
+      this.elements.lyricsList.scrollTop = 0;
+      this.elements.lyricsList.scrollLeft = 0;
       this.setStatus("歌词已载入");
       this.renderAll({ rebuildLyrics: true });
       return this.history.state;
@@ -570,6 +617,8 @@
       this.imageCache.clear();
       this.expandedLineIndex = null;
       this.history.reset(state);
+      this.elements.lyricsList.scrollTop = 0;
+      this.elements.lyricsList.scrollLeft = 0;
       this.setStatus("项目已恢复");
       this.renderAll({ rebuildLyrics: true });
       return state;
@@ -718,7 +767,7 @@
         }
         fragment.appendChild(row);
       });
-      this.elements.lyricsList.replaceChildren(fragment);
+      replaceChildrenPreservingScroll(this.elements.lyricsList, fragment);
       if (Icons) Icons.hydrate(this.elements.lyricsList);
     }
 
@@ -738,6 +787,12 @@
       this.elements.capsToggle.checked = state.style.capsMode === "allCaps";
       this.elements.removeBackground.disabled = !state.media.background && !state.media.useTrackArtworkAsBackground;
       this.elements.removeCover.disabled = !state.media.cover;
+      const hasTrackArtwork = Boolean(state.document.track.coverUrl);
+      const hasTrackArtworkSticker = state.stickers.some((sticker) => sticker.stickerID === "track-artwork");
+      this.elements.trackArtworkActions.hidden = !hasTrackArtwork;
+      this.elements.useArtworkBackground.disabled = !hasTrackArtwork;
+      this.elements.useArtworkCover.disabled = !hasTrackArtwork;
+      this.elements.addArtworkSticker.disabled = !hasTrackArtwork || hasTrackArtworkSticker;
       this.elements.backgroundFileName.textContent = state.media.background
         ? state.media.background.name
         : state.media.useTrackArtworkAsBackground ? "当前专辑封面" : "选择本地图片";
@@ -785,11 +840,100 @@
       if (inspector && name !== "lyrics" && name !== "export") inspector.scrollTop = 0;
     }
 
+    openDesktopTool(name, trigger) {
+      if (!["type", "layout", "media", "stickers"].includes(name)) return false;
+      const editor = document.querySelector(".editor-grid");
+      const inspector = document.querySelector(".inspector");
+      const section = inspector && inspector.querySelector(`.tool-section[data-mobile-tool="${name}"]`);
+      if (!editor || !inspector || !section) return false;
+      if (editor.dataset.inspectorCollapsed === "true") this.toggleDesktopPanel("inspector");
+      document.querySelectorAll(".desktop-tool-rail button[data-desktop-tool]").forEach((button) => {
+        button.setAttribute("aria-expanded", String(button === trigger));
+      });
+      const reveal = () => {
+        const header = inspector.querySelector(".inspector-header");
+        const headerHeight = header ? header.getBoundingClientRect().height : 0;
+        const inspectorTop = inspector.getBoundingClientRect().top;
+        const sectionTop = inspector.scrollTop + section.getBoundingClientRect().top - inspectorTop;
+        inspector.scrollTop = Math.max(0, sectionTop - headerHeight);
+        const heading = section.querySelector(".tool-section-title");
+        if (heading) {
+          heading.tabIndex = -1;
+          heading.focus({ preventScroll: true });
+        }
+      };
+      if (typeof root.requestAnimationFrame === "function") root.requestAnimationFrame(reveal);
+      else reveal();
+      return true;
+    }
+
     syncExportResolution() {
       const exportSpec = resolveExportSpec(this.elements.exportResolution.value);
       this.elements.exportResolution.value = String(exportSpec.pixels);
       this.elements.exportSize.textContent = `PNG · ${exportSpec.pixels} × ${exportSpec.pixels}`;
       return exportSpec;
+    }
+
+    setIntermediateInspectorSize(size) {
+      const editor = this.elements.editorGrid;
+      const handle = this.elements.inspectorResizeHandle;
+      const height = editor && (editor.getBoundingClientRect().height || editor.clientHeight);
+      if (!editor || !handle || !Number.isFinite(height) || height <= 0) return false;
+      const resolved = resolveIntermediateInspectorSize(height, size);
+      this.intermediateInspectorSize = resolved.size;
+      editor.style.setProperty("--intermediate-inspector-size", `${resolved.size}px`);
+      handle.setAttribute("aria-valuemin", String(resolved.min));
+      handle.setAttribute("aria-valuemax", String(resolved.max));
+      handle.setAttribute("aria-valuenow", String(resolved.size));
+      this.syncPreviewCanvasSize();
+      return true;
+    }
+
+    beginIntermediateInspectorResize(event) {
+      if (event.button !== undefined && event.button !== 0) return;
+      const inspector = this.elements.inspectorPanelToggle.closest(".inspector");
+      const startSize = inspector ? inspector.getBoundingClientRect().height : this.intermediateInspectorSize;
+      this.inspectorResizeGesture = {
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        startSize,
+      };
+      this.elements.inspectorResizeHandle.setPointerCapture(event.pointerId);
+      this.elements.inspectorResizeHandle.classList.add("is-resizing");
+      event.preventDefault();
+    }
+
+    moveIntermediateInspectorResize(event) {
+      const gesture = this.inspectorResizeGesture;
+      if (!gesture || gesture.pointerId !== event.pointerId) return;
+      this.setIntermediateInspectorSize(gesture.startSize - (event.clientY - gesture.startY));
+      event.preventDefault();
+    }
+
+    endIntermediateInspectorResize(event) {
+      const gesture = this.inspectorResizeGesture;
+      if (!gesture || gesture.pointerId !== event.pointerId) return;
+      this.inspectorResizeGesture = null;
+      this.elements.inspectorResizeHandle.classList.remove("is-resizing");
+      if (this.elements.inspectorResizeHandle.hasPointerCapture(event.pointerId)) {
+        this.elements.inspectorResizeHandle.releasePointerCapture(event.pointerId);
+      }
+    }
+
+    keyboardIntermediateInspectorResize(event) {
+      const height = this.elements.editorGrid.getBoundingClientRect().height || this.elements.editorGrid.clientHeight;
+      const bounds = resolveIntermediateInspectorSize(height, this.intermediateInspectorSize);
+      const changes = {
+        ArrowUp: this.intermediateInspectorSize + INTERMEDIATE_INSPECTOR_KEY_STEP,
+        ArrowDown: this.intermediateInspectorSize - INTERMEDIATE_INSPECTOR_KEY_STEP,
+        PageUp: this.intermediateInspectorSize + INTERMEDIATE_INSPECTOR_KEY_STEP * 4,
+        PageDown: this.intermediateInspectorSize - INTERMEDIATE_INSPECTOR_KEY_STEP * 4,
+        Home: bounds.min,
+        End: bounds.max,
+      };
+      if (!Object.prototype.hasOwnProperty.call(changes, event.key)) return;
+      event.preventDefault();
+      this.setIntermediateInspectorSize(changes[event.key]);
     }
 
     toggleDesktopPanel(panel) {
@@ -816,10 +960,25 @@
       button.setAttribute("aria-expanded", String(!collapsed));
       button.setAttribute("aria-label", collapsed ? config.collapsedLabel : config.expandedLabel);
       button.title = collapsed ? config.collapsedLabel : config.expandedLabel;
+      const inspectorRailButtons = panel === "inspector"
+        ? Array.from(document.querySelectorAll(".desktop-tool-rail button[data-desktop-tool]"))
+        : [];
+      if (panel === "inspector") {
+        inspectorRailButtons.forEach((railButton) => railButton.setAttribute("aria-expanded", "false"));
+        if (!collapsed) this.setIntermediateInspectorSize(this.intermediateInspectorSize);
+      }
       if (typeof root.requestAnimationFrame === "function") {
-        root.requestAnimationFrame(() => this.syncPreviewCanvasSize());
+        root.requestAnimationFrame(() => {
+          this.syncPreviewCanvasSize();
+          if (collapsed && document.activeElement === button && inspectorRailButtons[0]) {
+            inspectorRailButtons[0].focus();
+          }
+        });
       } else {
         this.syncPreviewCanvasSize();
+        if (collapsed && document.activeElement === button && inspectorRailButtons[0]) {
+          inspectorRailButtons[0].focus();
+        }
       }
       return collapsed;
     }
@@ -1009,6 +1168,39 @@
       } catch (error) {
         this.setStatus(error.message || "图片读取失败", true);
       }
+    }
+
+    useTrackArtwork(kind) {
+      if (!this.history.state.document.track.coverUrl) {
+        this.setStatus("当前曲目没有可用封面", true);
+        return;
+      }
+      this.execute({ type: "useTrackArtwork", kind }, false);
+      this.setStatus(kind === "background" ? "已将曲目封面用作背景" : "已恢复当前曲目封面");
+    }
+
+    addTrackArtworkSticker() {
+      const source = this.history.state.document.track.coverUrl;
+      if (!source) {
+        this.setStatus("当前曲目没有可用封面", true);
+        return;
+      }
+      if (this.history.state.stickers.some((sticker) => sticker.stickerID === "track-artwork")) {
+        this.setStatus("曲目封面贴纸已添加");
+        return;
+      }
+      this.execute({
+        type: "addSticker",
+        sticker: {
+          id: "track-artwork-sticker",
+          stickerID: "track-artwork",
+          imageData: source,
+          normalizedCenter: { x: 0.7, y: 0.7 },
+          normalizedSize: { width: 0.25, height: 0.25 },
+          rotation: 0,
+        },
+      }, false);
+      this.setStatus("曲目封面已添加为贴纸");
     }
 
     addGlyphSticker(glyph, color) {
@@ -1280,7 +1472,9 @@
     DEMO_DOCUMENT,
     createDocumentGateway,
     calculatePreviewSquareSize,
+    resolveIntermediateInspectorSize,
     effectiveMediaState,
+    replaceChildrenPreservingScroll,
     resolveExportSpec,
     safeImageSource,
     sanitizeFilename,

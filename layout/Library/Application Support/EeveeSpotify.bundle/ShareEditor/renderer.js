@@ -67,6 +67,8 @@
     footerTrackTitleSize: 7,
     footerTrackTextAlpha: 0.7,
     footerTrackSourceGap: 8,
+    footerSourceLogoSize: 10,
+    footerSourceLogoGap: 4,
     backgroundTintAlpha: 0.42,
     stickerHandleRadius: 4.5,
   });
@@ -651,9 +653,12 @@
     ctx.fillStyle = `rgba(255,255,255,${M.footerHairlineAlpha})`;
     ctx.fillRect(M.margin, M.footerHairlineY, M.logicalSize - M.margin * 2, 1);
 
+    const sourceLogoInset = drawSourceLogo(ctx, resources, M);
     const cover = resourceImage(resources, "cover");
     if (cover) {
-      const chipX = rtl ? M.logicalSize - M.margin - M.footerTrackCoverSize : M.margin;
+      const chipX = rtl
+        ? M.logicalSize - M.margin - M.footerTrackCoverSize
+        : M.margin + sourceLogoInset;
       drawCoverImage(ctx, cover, {
         x: chipX,
         y: M.footerTrackCoverTop,
@@ -670,13 +675,15 @@
     const sourceWidth = ctx.measureText(source).width;
     ctx.globalAlpha = M.footerHairlineTextAlpha;
     ctx.textAlign = rtl ? "left" : "right";
-    ctx.fillText(source, rtl ? M.margin : M.logicalSize - M.margin, M.footerBaseline);
+    ctx.fillText(source, rtl ? M.margin + sourceLogoInset : M.logicalSize - M.margin, M.footerBaseline);
     ctx.globalAlpha = 1;
 
     const chipInset = cover ? M.footerTrackCoverSize + M.footerTrackTextGap : 0;
-    let remaining = M.logicalSize - M.margin * 2 - chipInset - sourceWidth - M.footerTrackSourceGap;
+    let remaining = M.logicalSize - M.margin * 2 - sourceLogoInset - chipInset - sourceWidth - M.footerTrackSourceGap;
     if (remaining <= 0) return;
-    let cursor = rtl ? M.logicalSize - M.margin - chipInset : M.margin + chipInset;
+    let cursor = rtl
+      ? M.logicalSize - M.margin - chipInset
+      : M.margin + sourceLogoInset + chipInset;
     ctx.textAlign = rtl ? "right" : "left";
     const title = state.document.track.title;
     const artist = state.document.track.artist;
@@ -695,6 +702,18 @@
     ctx.globalAlpha = M.footerTrackTextAlpha;
     ctx.fillText(truncateText(ctx, segment, remaining), cursor, M.footerBaseline);
     ctx.globalAlpha = 1;
+  }
+
+  function drawSourceLogo(ctx, resources, M) {
+    const logo = resourceImage(resources, "sourceLogo");
+    if (!logo) return 0;
+    drawCoverImage(ctx, logo, {
+      x: M.margin,
+      y: M.footerBaseline - M.footerSourceLogoSize + 2,
+      width: M.footerSourceLogoSize,
+      height: M.footerSourceLogoSize,
+    }, Math.min(2, M.footerSourceLogoSize / 4));
+    return M.footerSourceLogoSize + M.footerSourceLogoGap;
   }
 
   function drawFooter(ctx, state, resources, metrics) {
@@ -717,7 +736,8 @@
       ctx.textBaseline = "alphabetic";
       ctx.textAlign = "left";
       ctx.font = fontSpec("classic", M.footerHairlineTextSize, 600);
-      ctx.fillText(source, M.margin, M.footerBaseline);
+      const sourceLogoInset = drawSourceLogo(ctx, resources, M);
+      ctx.fillText(source, M.margin + sourceLogoInset, M.footerBaseline);
       ctx.globalAlpha = 1;
       ctx.restore();
       return;
@@ -726,16 +746,20 @@
     ctx.textBaseline = "alphabetic";
     ctx.textAlign = "left";
     ctx.font = fontSpec("classic", M.footerMarkSize, 800);
-    ctx.beginPath();
-    ctx.arc(M.margin + M.footerMarkOffsetX, M.footerBaseline + M.footerMarkOffsetY, M.footerMarkRadius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.beginPath();
-    ctx.arc(M.margin + M.footerMarkInnerOffsetX, M.footerBaseline + M.footerMarkInnerOffsetY, M.footerMarkInnerRadius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalCompositeOperation = "source-over";
+    let sourceInset = drawSourceLogo(ctx, resources, M);
+    if (!sourceInset) {
+      ctx.beginPath();
+      ctx.arc(M.margin + M.footerMarkOffsetX, M.footerBaseline + M.footerMarkOffsetY, M.footerMarkRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.beginPath();
+      ctx.arc(M.margin + M.footerMarkInnerOffsetX, M.footerBaseline + M.footerMarkInnerOffsetY, M.footerMarkInnerRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      sourceInset = M.footerTextOffsetX;
+    }
     ctx.font = fontSpec("classic", M.footerSize, 800);
-    ctx.fillText(source, M.margin + M.footerTextOffsetX, M.footerBaseline);
+    ctx.fillText(source, M.margin + sourceInset, M.footerBaseline);
     ctx.restore();
   }
 

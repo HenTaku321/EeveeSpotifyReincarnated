@@ -185,6 +185,8 @@ summary:focus-visible,
 
 .mobile-tool-dock { display: none; }
 
+.inspector-resize-handle { display: none; }
+
 .lyrics-panel, .preview-panel, .inspector { min-width: 0; min-height: 0; }
 
 /* ---- 歌词面板 -------------------------------------------------------------- */
@@ -493,6 +495,43 @@ summary:focus-visible,
 }
 
 .inspector-header { display: none; }
+
+.desktop-tool-rail { display: none; }
+
+.desktop-tool-rail button {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.desktop-tool-rail button:hover { background: var(--surface-3); color: var(--text); }
+
+.track-artwork-actions {
+  display: grid;
+  gap: var(--s-2);
+  margin-bottom: var(--s-4);
+}
+
+.track-artwork-actions[hidden] { display: none; }
+.track-artwork-actions p { color: var(--text-muted); font-size: var(--fs-sm); }
+
+.track-artwork-action-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s-2);
+}
+
+.track-artwork-action-grid .pill-button {
+  width: 100%;
+  justify-content: flex-start;
+}
 
 .tool-section { padding: var(--s-5) var(--s-4) var(--s-6); }
 .tool-section + .tool-section { border-top: 1px solid var(--hairline); }
@@ -849,6 +888,17 @@ dialog::backdrop { background: var(--bg); opacity: 0.72; }
     padding-bottom: 0;
   }
 
+  .editor-grid[data-inspector-collapsed="true"] .inspector .inspector-header { display: none; }
+
+  .editor-grid[data-inspector-collapsed="true"] .desktop-tool-rail {
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--s-1);
+    padding: var(--s-1) 4px;
+  }
+
   .editor-grid[data-lyrics-collapsed="true"] #lyrics-panel-toggle .icon,
   .editor-grid[data-inspector-collapsed="true"] #inspector-panel-toggle .icon {
     transform: rotate(180deg);
@@ -875,8 +925,9 @@ dialog::backdrop { background: var(--bg); opacity: 0.72; }
 
 @media (min-width: 761px) and (max-width: 1080px) {
   .editor-grid {
+    --intermediate-inspector-size: 192px;
     grid-template-columns: var(--lyrics-panel-track) minmax(0, 1fr);
-    grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+    grid-template-rows: minmax(180px, 1fr) 12px minmax(144px, var(--intermediate-inspector-size));
     overflow: hidden;
   }
 
@@ -888,15 +939,50 @@ dialog::backdrop { background: var(--bg); opacity: 0.72; }
 
   .lyrics-panel, .preview-panel { grid-row: 1; }
 
-  .inspector {
+  .inspector-resize-handle {
     grid-column: 1 / -1;
     grid-row: 2;
+    min-height: 12px;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-top: 1px solid var(--hairline);
+    border-bottom: 1px solid var(--hairline);
+    background: var(--surface-2);
+    cursor: row-resize;
+    touch-action: none;
+  }
+
+  .inspector-resize-handle span {
+    width: 48px;
+    height: 3px;
+    border-radius: var(--r-pill);
+    background: var(--hairline-strong);
+  }
+
+  .inspector-resize-handle:hover span,
+  .inspector-resize-handle:focus-visible span,
+  .inspector-resize-handle.is-resizing span { background: var(--accent); }
+
+  .editor-grid:not([data-inspector-collapsed="true"]) > .inspector-resize-handle { display: flex; }
+
+  .inspector {
+    grid-column: 1 / -1;
+    grid-row: 3;
     min-height: 0;
     border-left: 0;
     border-top: 1px solid var(--hairline);
     overflow: auto;
     overscroll-behavior: contain;
   }
+
+  .editor-grid[data-inspector-collapsed="true"] .desktop-tool-rail {
+    flex-direction: row;
+    justify-content: center;
+    padding: 4px var(--s-2);
+  }
+
+  .editor-grid[data-inspector-collapsed="true"] > .inspector { grid-row: 2; }
 
   #inspector-panel-toggle .icon { transform: rotate(90deg); }
   .editor-grid[data-inspector-collapsed="true"] #inspector-panel-toggle .icon { transform: rotate(-90deg); }
@@ -917,6 +1003,9 @@ dialog::backdrop { background: var(--bg); opacity: 0.72; }
     grid-template-rows: auto minmax(0, 1fr) auto;
     overflow: hidden;
   }
+
+  .panel-collapse-button,
+  .desktop-tool-rail { display: none !important; }
 
   .mobile-tool-dock {
     grid-row: 3;
@@ -1047,6 +1136,11 @@ dialog::backdrop { background: var(--bg); opacity: 0.72; }
     overscroll-behavior: contain;
   }
 
+  .editor-grid[data-inspector-collapsed="true"] > .inspector {
+    overflow: auto;
+    padding-bottom: max(var(--s-6), env(safe-area-inset-bottom));
+  }
+
   /* 抽屉内只显示当前工具对应的分区 */
   .editor-grid[data-mobile-tool] .tool-section { display: none; border-top: 0; }
   .editor-grid[data-mobile-tool="type"] .tool-section[data-mobile-tool="type"],
@@ -1081,8 +1175,8 @@ dialog::backdrop { background: var(--bg); opacity: 0.72; }
   }
 
   .app-title p { display: none; }
-  .preview-heading { min-height: 36px; }
-  .editor-grid { grid-template-rows: auto minmax(0, 1fr) auto minmax(120px, 42%); }
+  .preview-heading { display: none; }
+  .editor-grid { grid-template-rows: 0 minmax(0, 1fr) 44px 88px !important; }
   .mobile-tool-dock button { min-height: 44px; }
   .canvas-stage { padding-top: var(--s-1); padding-bottom: var(--s-1); }
   .template-switch { padding-bottom: var(--s-1); }

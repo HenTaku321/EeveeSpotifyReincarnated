@@ -68,7 +68,7 @@
           options.onSaveResult({
             ok: false,
             reason: String(error.payload?.reason || error.message || "save-failed"),
-            currentHash: String(error.payload?.currentHash || ""),
+            currentHash: String(error.payload?.hash || error.payload?.currentHash || ""),
           });
           throw error;
         }

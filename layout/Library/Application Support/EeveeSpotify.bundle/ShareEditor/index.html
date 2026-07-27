@@ -41,7 +41,7 @@
       <button type="button" role="tab" aria-selected="false" data-mobile-tool="export"><span class="icon-slot" data-icon="download"></span><small>导出</small></button>
     </nav>
 
-    <main class="editor-grid" data-mobile-tool="lyrics" data-lyrics-collapsed="false" data-inspector-collapsed="false">
+    <main id="editor-grid" class="editor-grid" data-mobile-tool="lyrics" data-lyrics-collapsed="false" data-inspector-collapsed="true">
       <section class="lyrics-panel" id="lyrics-panel" aria-labelledby="lyrics-heading">
         <div class="panel-heading">
           <div class="panel-heading-copy">
@@ -84,10 +84,20 @@
         </footer>
       </section>
 
+      <div class="inspector-resize-handle" id="inspector-resize-handle" role="separator" tabindex="0" aria-orientation="horizontal" aria-controls="inspector-panel" aria-label="调整样式工具高度" aria-valuemin="144" aria-valuemax="144" aria-valuenow="144">
+        <span aria-hidden="true"></span>
+      </div>
+
       <aside class="inspector" id="inspector-panel" aria-label="样式工具">
+        <nav class="desktop-tool-rail" aria-label="样式工具快捷入口">
+          <button type="button" data-desktop-tool="type" aria-controls="inspector-panel" aria-expanded="false" title="字体" aria-label="展开字体工具"><span class="icon-slot" data-icon="type"></span></button>
+          <button type="button" data-desktop-tool="layout" aria-controls="inspector-panel" aria-expanded="false" title="排版与配色" aria-label="展开排版与配色工具"><span class="icon-slot" data-icon="layout"></span></button>
+          <button type="button" data-desktop-tool="media" aria-controls="inspector-panel" aria-expanded="false" title="图像" aria-label="展开图像工具"><span class="icon-slot" data-icon="media"></span></button>
+          <button type="button" data-desktop-tool="stickers" aria-controls="inspector-panel" aria-expanded="false" title="贴纸" aria-label="展开贴纸工具"><span class="icon-slot" data-icon="sticker"></span></button>
+        </nav>
         <div class="inspector-header">
           <h2>样式工具</h2>
-          <button class="panel-collapse-button" id="inspector-panel-toggle" type="button" aria-controls="inspector-panel" aria-expanded="true" aria-label="收起样式工具" title="收起样式工具"><span class="icon-slot" data-icon="chevronRight"></span></button>
+          <button class="panel-collapse-button" id="inspector-panel-toggle" type="button" aria-controls="inspector-panel" aria-expanded="false" aria-label="展开样式工具" title="展开样式工具"><span class="icon-slot" data-icon="chevronRight"></span></button>
         </div>
         <section class="tool-section" data-mobile-tool="layout" aria-labelledby="section-color-title">
           <h3 class="tool-section-title" id="section-color-title">配色</h3>
@@ -130,6 +140,14 @@
 
         <section class="tool-section" data-mobile-tool="media" aria-labelledby="section-media-title">
           <h3 class="tool-section-title" id="section-media-title">图像</h3>
+          <div class="track-artwork-actions" id="track-artwork-actions" hidden>
+            <p>当前曲目封面</p>
+            <div class="track-artwork-action-grid">
+              <button class="pill-button secondary" id="use-artwork-background" type="button"><span class="icon-slot" data-icon="media"></span>用作背景图</button>
+              <button class="pill-button secondary" id="use-artwork-cover" type="button"><span class="icon-slot" data-icon="music"></span>用作专辑封面</button>
+              <button class="pill-button secondary" id="add-artwork-sticker" type="button"><span class="icon-slot" data-icon="sticker"></span>添加为贴纸</button>
+            </div>
+          </div>
           <label class="file-drop" for="background-input">
             <span class="file-drop-icon icon-slot" data-icon="media" aria-hidden="true"></span>
             <span class="file-drop-text"><span class="file-drop-title">背景图</span><span class="file-drop-name" id="background-file-name">选择本地图片</span></span>
