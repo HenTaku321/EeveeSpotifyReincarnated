@@ -19,7 +19,7 @@ final class LyricsShareEditorBridge: NSObject, WKScriptMessageHandler {
 }
 
 struct LyricsShareEditorPNG {
-    static let maximumBytes = 8 * 1024 * 1024
+    static let maximumBytes = 32 * 1024 * 1024
     static let maximumDimension = 4096
     static let maximumPixels = 16_777_216
 
@@ -29,10 +29,10 @@ struct LyricsShareEditorPNG {
     static func decode(base64: String, suggestedFilename: String) throws -> LyricsShareEditorPNG {
         let maximumBase64Characters = ((maximumBytes + 2) / 3) * 4
         guard !base64.isEmpty, base64.utf8.count <= maximumBase64Characters else {
-            throw LyricsShareEditorError.export("PNG 数据大小超过 8 MiB 限制。")
+            throw LyricsShareEditorError.export("PNG 数据大小超过 32 MiB 限制。")
         }
         guard let data = Data(base64Encoded: base64), data.count <= maximumBytes else {
-            throw LyricsShareEditorError.export("PNG 数据不是有效的 Base64，或大小超过限制。")
+            throw LyricsShareEditorError.export("PNG 数据不是有效的 Base64，或大小超过 32 MiB 限制。")
         }
 
         let signature = Data([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])

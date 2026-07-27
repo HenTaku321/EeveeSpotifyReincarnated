@@ -38,6 +38,8 @@
   const MAX_PROJECT_BYTES = State.MAX_PROJECT_BYTES;
   const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
   const MAX_PREVIEW_CSS_SIZE = 560;
+  const EXPORT_SCALES = Object.freeze({ 891: 3, 1782: 6, 2673: 9 });
+  const DEFAULT_EXPORT_PIXELS = 1782;
   const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
   const DEMO_DOCUMENT = Object.freeze({
     source: "github",
@@ -390,6 +392,14 @@
     return Number.isFinite(number) ? number : 0;
   }
 
+  function resolveExportSpec(value) {
+    const requested = Number.parseInt(String(value || ""), 10);
+    const pixels = Object.prototype.hasOwnProperty.call(EXPORT_SCALES, requested)
+      ? requested
+      : DEFAULT_EXPORT_PIXELS;
+    return { pixels, scale: EXPORT_SCALES[pixels] };
+  }
+
   class EditorController {
     constructor(documentInput) {
       this.elements = this.collectElements();
@@ -414,8 +424,8 @@
     collectElements() {
       const ids = [
         "track-name", "undo-button", "redo-button", "mobile-project-button", "load-button", "project-menu-button", "project-input",
-        "selection-limit", "lyrics-list", "track-summary", "status-output", "canvas-stage", "preview-canvas", "template-switch",
-        "export-canvas", "download-button", "share-button", "background-color", "text-color", "tint-color",
+        "selection-limit", "lyrics-list", "lyrics-panel-toggle", "inspector-panel-toggle", "track-summary", "status-output", "canvas-stage", "preview-canvas", "template-switch",
+        "export-canvas", "export-resolution", "export-size", "download-button", "share-button", "background-color", "text-color", "tint-color",
         "caps-toggle", "background-input", "background-file-name", "remove-background", "cover-input",
         "cover-file-name", "remove-cover", "sticker-palette", "sticker-input", "sticker-summary", "delete-sticker",
         "source-dialog", "source-form", "close-source-dialog", "cancel-source-dialog", "repository-path",
@@ -489,6 +499,9 @@
       root.addEventListener("message", (event) => this.handleBootstrapMessage(event));
       e.projectMenuButton.addEventListener("click", () => this.saveProject());
       e.projectInput.addEventListener("change", (event) => this.openProject(event));
+      e.lyricsPanelToggle.addEventListener("click", () => this.toggleDesktopPanel("lyrics"));
+      e.inspectorPanelToggle.addEventListener("click", () => this.toggleDesktopPanel("inspector"));
+      e.exportResolution.addEventListener("change", () => this.syncExportResolution());
       e.downloadButton.addEventListener("click", () => this.exportImage("save"));
       e.shareButton.addEventListener("click", () => this.exportImage("share"));
       e.backgroundInput.addEventListener("change", (event) => this.setLocalMedia("background", event));
@@ -770,6 +783,45 @@
       });
       const inspector = document.querySelector(".inspector");
       if (inspector && name !== "lyrics" && name !== "export") inspector.scrollTop = 0;
+    }
+
+    syncExportResolution() {
+      const exportSpec = resolveExportSpec(this.elements.exportResolution.value);
+      this.elements.exportResolution.value = String(exportSpec.pixels);
+      this.elements.exportSize.textContent = `PNG · ${exportSpec.pixels} × ${exportSpec.pixels}`;
+      return exportSpec;
+    }
+
+    toggleDesktopPanel(panel) {
+      const editor = document.querySelector(".editor-grid");
+      const configs = {
+        lyrics: {
+          attribute: "lyricsCollapsed",
+          button: this.elements.lyricsPanelToggle,
+          collapsedLabel: "展开歌词面板",
+          expandedLabel: "收起歌词面板",
+        },
+        inspector: {
+          attribute: "inspectorCollapsed",
+          button: this.elements.inspectorPanelToggle,
+          collapsedLabel: "展开样式工具",
+          expandedLabel: "收起样式工具",
+        },
+      };
+      const config = configs[panel];
+      if (!editor || !config) return false;
+      const { attribute, button } = config;
+      const collapsed = editor.dataset[attribute] !== "true";
+      editor.dataset[attribute] = String(collapsed);
+      button.setAttribute("aria-expanded", String(!collapsed));
+      button.setAttribute("aria-label", collapsed ? config.collapsedLabel : config.expandedLabel);
+      button.title = collapsed ? config.collapsedLabel : config.expandedLabel;
+      if (typeof root.requestAnimationFrame === "function") {
+        root.requestAnimationFrame(() => this.syncPreviewCanvasSize());
+      } else {
+        this.syncPreviewCanvasSize();
+      }
+      return collapsed;
     }
 
     setStatus(message, error) {
@@ -1126,8 +1178,9 @@
 
     async renderExport() {
       const state = effectiveMediaState(this.history.state);
+      const exportSpec = resolveExportSpec(this.elements.exportResolution.value);
       let resources = await this.imageCache.resolve(state);
-      Renderer.renderToCanvas(this.elements.exportCanvas, state, resources, { showSelection: false });
+      Renderer.renderToCanvas(this.elements.exportCanvas, state, resources, { showSelection: false, scale: exportSpec.scale });
       try {
         this.elements.exportCanvas.getContext("2d").getImageData(0, 0, 1, 1);
       } catch (_error) {
@@ -1137,7 +1190,7 @@
         };
         this.elements.exportCanvas.width = 1;
         this.elements.exportCanvas.height = 1;
-        Renderer.renderToCanvas(this.elements.exportCanvas, state, resources, { showSelection: false });
+        Renderer.renderToCanvas(this.elements.exportCanvas, state, resources, { showSelection: false, scale: exportSpec.scale });
       }
       return canvasToBlob(this.elements.exportCanvas);
     }
@@ -1228,6 +1281,7 @@
     createDocumentGateway,
     calculatePreviewSquareSize,
     effectiveMediaState,
+    resolveExportSpec,
     safeImageSource,
     sanitizeFilename,
     publicApi,

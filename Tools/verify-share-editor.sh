@@ -130,7 +130,10 @@ if grep -Fq 'project.media.useTrackArtworkAsBackground = true;' "$source_dir/Lyr
     echo "track artwork must not be enabled as the share background automatically" >&2
     exit 1
 fi
-grep -Fq 'maximumBytes = 8 * 1024 * 1024' "$source_dir/LyricsShareEditorBridge.swift"
+grep -Fq 'maximumBytes = 32 * 1024 * 1024' "$source_dir/LyricsShareEditorBridge.swift"
+grep -Fq 'PNG 数据大小超过 32 MiB 限制' "$source_dir/LyricsShareEditorBridge.swift"
+grep -Fq 'private static let maximumDocumentBytes = 8 * 1024 * 1024' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'LyricsShareEditorSessionDelegate(maximumBytes: Self.maximumDocumentBytes)' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'MPMediaItemPropertyAlbumTitle' "$source_dir/LyricsShareEditorDocument.swift"
 grep -Fq 'MPMediaItemPropertyArtwork' "$source_dir/LyricsShareEditorDocument.swift"
 grep -Fq 'artwork.image(at:' "$source_dir/LyricsShareEditorDocument.swift"
@@ -151,7 +154,12 @@ grep -Fq 'LyricsShareEditorTrackResolver.currentArtworkDataURL(matching: track)'
 grep -Fq 'LyricsShareEditorTrackResolver.currentArtworkRemoteURL(matching: track)' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'artworkLoader.resolve(track: track' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'trackObject["coverUrl"] = artworkDataURL' "$source_dir/LyricsShareEditorViewController.swift"
-grep -Fq 'encodedDocument.count > LyricsShareEditorPNG.maximumBytes' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'encodedDocument.count > Self.maximumDocumentBytes' "$source_dir/LyricsShareEditorViewController.swift"
+grep -Fq 'data.count <= Self.maximumDocumentBytes' "$source_dir/LyricsShareEditorViewController.swift"
+if grep -Fq 'LyricsShareEditorPNG.maximumBytes' "$source_dir/LyricsShareEditorViewController.swift"; then
+    echo "lyrics document limits must remain independent from the PNG export limit" >&2
+    exit 1
+fi
 grep -Fq 'scriptMessage.frameInfo.isMainFrame' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'removeScriptMessageHandler(forName: "shareEditor")' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'webView.isUserInteractionEnabled = false' "$source_dir/LyricsShareEditorViewController.swift"

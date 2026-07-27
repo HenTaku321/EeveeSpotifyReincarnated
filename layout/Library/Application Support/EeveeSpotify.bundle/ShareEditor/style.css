@@ -174,10 +174,12 @@ summary:focus-visible,
 /* ---- 编辑网格（桌面三栏）--------------------------------------------------- */
 
 .editor-grid {
+  --lyrics-panel-track: 320px;
+  --inspector-panel-track: 340px;
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr) 340px;
+  grid-template-columns: var(--lyrics-panel-track) minmax(0, 1fr) var(--inspector-panel-track);
   overflow: hidden;
 }
 
@@ -203,7 +205,32 @@ summary:focus-visible,
   padding: var(--s-3) var(--s-4);
 }
 
+.panel-heading-copy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  flex: 1;
+}
+
 .panel-heading h2 { font-size: var(--fs-base); font-weight: var(--fw-bold); }
+
+.panel-collapse-button {
+  display: none;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.panel-collapse-button:hover { background: var(--surface-3); color: var(--text); }
+.panel-collapse-button .icon { transition: transform var(--dur-fast) var(--ease); }
 
 .limit-badge {
   padding: var(--s-1) var(--s-3);
@@ -319,7 +346,7 @@ summary:focus-visible,
 
 .preview-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   background: var(--bg);
 }
 
@@ -374,7 +401,20 @@ summary:focus-visible,
 
 #preview-canvas.is-manipulating { cursor: grabbing; }
 
-.template-switch { display: flex; justify-content: center; gap: var(--s-2); padding: 0 var(--s-4) var(--s-4); }
+.preview-footer {
+  min-height: 72px;
+  max-height: 132px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  overflow: auto;
+  border-top: 1px solid var(--hairline);
+  background: var(--bg);
+}
+
+.template-switch { display: flex; justify-content: center; gap: var(--s-2); }
 
 .template-switch button {
   min-height: var(--control-h-sm);
@@ -394,14 +434,29 @@ summary:focus-visible,
 .export-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: var(--s-3);
-  min-height: 72px;
-  padding: var(--s-3) var(--s-4);
-  border-top: 1px solid var(--hairline);
+  min-width: 0;
+  margin-left: auto;
 }
 
 .export-size { color: var(--text-subtle); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+
+.export-resolution {
+  min-width: 132px;
+  display: grid;
+  gap: 2px;
+}
+
+.export-resolution select {
+  min-height: var(--control-h-sm);
+  padding: 0 var(--s-7) 0 var(--s-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-base);
+}
 
 .export-actions { display: flex; align-items: center; gap: var(--s-2); }
 
@@ -436,6 +491,8 @@ summary:focus-visible,
   scrollbar-gutter: stable;
   padding-bottom: max(var(--s-6), env(safe-area-inset-bottom));
 }
+
+.inspector-header { display: none; }
 
 .tool-section { padding: var(--s-5) var(--s-4) var(--s-6); }
 .tool-section + .tool-section { border-top: 1px solid var(--hairline); }
@@ -764,13 +821,67 @@ dialog::backdrop { background: var(--bg); opacity: 0.72; }
 
 .dialog-actions { display: flex; justify-content: flex-end; gap: var(--s-2); padding: var(--s-4) var(--s-5) var(--s-5); }
 
-/* ---- 中间断点（≤1080px）：双栏 + 工具区下移 -------------------------------- */
+/* ---- 桌面面板收起（>760px）------------------------------------------------- */
 
-@media (max-width: 1080px) {
+@media (min-width: 761px) {
+  .panel-collapse-button { display: grid; }
+
+  .editor-grid[data-lyrics-collapsed="true"] { --lyrics-panel-track: 44px; }
+  .editor-grid[data-inspector-collapsed="true"] { --inspector-panel-track: 44px; }
+
+  .editor-grid[data-lyrics-collapsed="true"] .lyrics-panel .panel-heading-copy,
+  .editor-grid[data-lyrics-collapsed="true"] .lyrics-panel .lyrics-list,
+  .editor-grid[data-inspector-collapsed="true"] .inspector .tool-section,
+  .editor-grid[data-inspector-collapsed="true"] .inspector .inspector-header h2 {
+    display: none;
+  }
+
+  .editor-grid[data-lyrics-collapsed="true"] .lyrics-panel .panel-heading,
+  .editor-grid[data-inspector-collapsed="true"] .inspector .inspector-header {
+    min-height: 44px;
+    justify-content: center;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  .editor-grid[data-inspector-collapsed="true"] .inspector {
+    overflow: hidden;
+    padding-bottom: 0;
+  }
+
+  .editor-grid[data-lyrics-collapsed="true"] #lyrics-panel-toggle .icon,
+  .editor-grid[data-inspector-collapsed="true"] #inspector-panel-toggle .icon {
+    transform: rotate(180deg);
+  }
+
+  .inspector-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s-3);
+    padding: var(--s-3) var(--s-4);
+    border-bottom: 1px solid var(--hairline);
+    background: var(--surface);
+  }
+
+  .inspector-header h2 { font-size: var(--fs-base); font-weight: var(--fw-bold); }
+}
+
+/* ---- 中间断点（761–1080px）：双栏 + 工具区下移 ----------------------------- */
+
+@media (min-width: 761px) and (max-width: 1080px) {
   .editor-grid {
-    grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+    grid-template-columns: var(--lyrics-panel-track) minmax(0, 1fr);
     grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
     overflow: hidden;
+  }
+
+  .editor-grid[data-inspector-collapsed="true"] {
+    grid-template-rows: minmax(0, 1fr) 44px;
   }
 
   .lyrics-panel, .preview-panel { grid-row: 1; }
@@ -784,6 +895,9 @@ dialog::backdrop { background: var(--bg); opacity: 0.72; }
     overflow: auto;
     overscroll-behavior: contain;
   }
+
+  #inspector-panel-toggle .icon { transform: rotate(90deg); }
+  .editor-grid[data-inspector-collapsed="true"] #inspector-panel-toggle .icon { transform: rotate(-90deg); }
 }
 
 /* ---- 移动端（≤760px，含矮横屏）--------------------------------------------- */
@@ -846,6 +960,8 @@ dialog::backdrop { background: var(--bg); opacity: 0.72; }
   /* 预览面板成为编辑网格本体：预览在任何工具下都完整可见 */
   .editor-grid > .preview-panel { display: contents; }
 
+  .preview-footer { display: contents; }
+
   .editor-grid > .lyrics-panel,
   .editor-grid > .inspector { display: none; }
 
@@ -891,6 +1007,7 @@ dialog::backdrop { background: var(--bg); opacity: 0.72; }
 
   .editor-grid:not([data-mobile-tool="export"]) .export-bar { display: none; }
   .editor-grid[data-mobile-tool="export"] .export-bar { grid-row: 4; display: grid; }
+  .export-bar { margin-left: 0; }
 
   .lyrics-panel,
   .inspector,

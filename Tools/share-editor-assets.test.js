@@ -2,11 +2,32 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const ShareState = require("../layout/Library/Application Support/EeveeSpotify.bundle/ShareEditor/editor-state.js");
 const TimelineState = require("../layout/Library/Application Support/EeveeSpotify.bundle/TimelineEditor/editor-state.js");
 
 const TINY_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const HASH = "0123456789abcdef".repeat(4);
+
+function readSource(name) {
+  return fs.readFileSync(path.join(__dirname, "../Sources/EeveeSpotify/ShareEditor", name), "utf8");
+}
+
+test("native bridge keeps lyrics documents at 8 MiB while allowing 32 MiB PNG exports", () => {
+  const bridge = readSource("LyricsShareEditorBridge.swift");
+  const controller = readSource("LyricsShareEditorViewController.swift");
+
+  assert.match(bridge, /static let maximumBytes = 32 \* 1024 \* 1024/);
+  assert.match(bridge, /PNG 数据大小超过 32 MiB 限制/);
+  assert.match(bridge, /static let maximumDimension = 4096/);
+  assert.match(bridge, /static let maximumPixels = 16_777_216/);
+  assert.match(controller, /private static let maximumDocumentBytes = 8 \* 1024 \* 1024/);
+  assert.match(controller, /LyricsShareEditorSessionDelegate\(maximumBytes: Self\.maximumDocumentBytes\)/);
+  assert.match(controller, /encodedDocument\.count > Self\.maximumDocumentBytes/);
+  assert.match(controller, /data\.count <= Self\.maximumDocumentBytes/);
+  assert.doesNotMatch(controller, /LyricsShareEditorPNG\.maximumBytes/);
+});
 
 test("captured artwork remains a cover without becoming the default background", () => {
   const state = ShareState.createEditorState({

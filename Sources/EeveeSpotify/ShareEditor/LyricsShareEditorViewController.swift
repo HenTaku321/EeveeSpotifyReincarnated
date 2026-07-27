@@ -4,6 +4,8 @@ import UIKit
 import WebKit
 
 final class LyricsShareEditorViewController: UIViewController, WKNavigationDelegate, LyricsShareEditorBridgeDelegate {
+    private static let maximumDocumentBytes = 8 * 1024 * 1024
+
     private enum ProjectLoadResult {
         case missing
         case loaded(Data)
@@ -376,7 +378,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
         }
 
         let requestID = UUID()
-        let delegate = LyricsShareEditorSessionDelegate(maximumBytes: LyricsShareEditorPNG.maximumBytes) {
+        let delegate = LyricsShareEditorSessionDelegate(maximumBytes: Self.maximumDocumentBytes) {
             [weak self] data, response, error in
             DispatchQueue.main.async {
                 self?.finishLyricsRequest(
@@ -466,7 +468,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
             trackObject["coverUrl"] = artworkDataURL
             object["track"] = trackObject
             if let encodedDocument = try? JSONSerialization.data(withJSONObject: object),
-               encodedDocument.count > LyricsShareEditorPNG.maximumBytes {
+               encodedDocument.count > Self.maximumDocumentBytes {
                 trackObject.removeValue(forKey: "coverUrl")
             }
         }
@@ -487,7 +489,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
             throw LyricsShareEditorError.invalidResponse("歌词文档不是有效 JSON。")
         }
         let data = try JSONSerialization.data(withJSONObject: document, options: [])
-        guard data.count <= LyricsShareEditorPNG.maximumBytes else {
+        guard data.count <= Self.maximumDocumentBytes else {
             throw LyricsShareEditorError.invalidResponse("歌词文档超过大小限制。")
         }
         let encoded = data.base64EncodedString()

@@ -41,11 +41,14 @@
       <button type="button" role="tab" aria-selected="false" data-mobile-tool="export"><span class="icon-slot" data-icon="download"></span><small>导出</small></button>
     </nav>
 
-    <main class="editor-grid" data-mobile-tool="lyrics">
-      <section class="lyrics-panel" aria-labelledby="lyrics-heading">
+    <main class="editor-grid" data-mobile-tool="lyrics" data-lyrics-collapsed="false" data-inspector-collapsed="false">
+      <section class="lyrics-panel" id="lyrics-panel" aria-labelledby="lyrics-heading">
         <div class="panel-heading">
-          <h2 id="lyrics-heading">歌词</h2>
-          <span class="limit-badge" id="selection-limit">0 / 6</span>
+          <div class="panel-heading-copy">
+            <h2 id="lyrics-heading">歌词</h2>
+            <span class="limit-badge" id="selection-limit">0 / 6</span>
+          </div>
+          <button class="panel-collapse-button" id="lyrics-panel-toggle" type="button" aria-controls="lyrics-panel" aria-expanded="true" aria-label="收起歌词面板" title="收起歌词面板"><span class="icon-slot" data-icon="chevronLeft"></span></button>
         </div>
         <div class="lyrics-list" id="lyrics-list"></div>
       </section>
@@ -58,21 +61,34 @@
         <div class="canvas-stage" id="canvas-stage">
           <canvas id="preview-canvas" width="891" height="891" aria-label="歌词卡片预览"></canvas>
         </div>
-        <div class="template-switch" id="template-switch" role="group" aria-label="卡片模板">
-          <button type="button" data-template="skeleton" aria-pressed="false">骨架</button>
-          <button type="button" class="is-selected" data-template="lyrics" aria-pressed="true">歌词</button>
-          <button type="button" data-template="poster" aria-pressed="false">海报</button>
-        </div>
-        <div class="export-bar" aria-label="导出工具">
-          <span class="export-size">PNG · 891 × 891</span>
-          <div class="export-actions">
-            <button class="pill-button secondary" id="share-button" type="button" hidden><span class="icon-slot" data-icon="share"></span>系统分享</button>
-            <button class="pill-button primary" id="download-button" type="button"><span class="icon-slot" data-icon="download"></span>保存 PNG</button>
+        <footer class="preview-footer">
+          <div class="template-switch" id="template-switch" role="group" aria-label="卡片模板">
+            <button type="button" data-template="skeleton" aria-pressed="false">骨架</button>
+            <button type="button" class="is-selected" data-template="lyrics" aria-pressed="true">歌词</button>
+            <button type="button" data-template="poster" aria-pressed="false">海报</button>
           </div>
-        </div>
+          <div class="export-bar" aria-label="导出工具">
+            <label class="export-resolution" for="export-resolution">
+              <span class="export-size" id="export-size">PNG · 1782 × 1782</span>
+              <select id="export-resolution" aria-label="PNG 导出尺寸">
+                <option value="891">891 × 891</option>
+                <option value="1782" selected>1782 × 1782</option>
+                <option value="2673">2673 × 2673</option>
+              </select>
+            </label>
+            <div class="export-actions">
+              <button class="pill-button secondary" id="share-button" type="button" hidden><span class="icon-slot" data-icon="share"></span>系统分享</button>
+              <button class="pill-button primary" id="download-button" type="button"><span class="icon-slot" data-icon="download"></span>保存 PNG</button>
+            </div>
+          </div>
+        </footer>
       </section>
 
-      <aside class="inspector" aria-label="样式工具">
+      <aside class="inspector" id="inspector-panel" aria-label="样式工具">
+        <div class="inspector-header">
+          <h2>样式工具</h2>
+          <button class="panel-collapse-button" id="inspector-panel-toggle" type="button" aria-controls="inspector-panel" aria-expanded="true" aria-label="收起样式工具" title="收起样式工具"><span class="icon-slot" data-icon="chevronRight"></span></button>
+        </div>
         <section class="tool-section" data-mobile-tool="layout" aria-labelledby="section-color-title">
           <h3 class="tool-section-title" id="section-color-title">配色</h3>
           <div class="swatch-row" id="color-presets">
@@ -185,7 +201,7 @@
     </form>
   </dialog>
 
-  <canvas id="export-canvas" width="891" height="891" hidden></canvas>
+  <canvas id="export-canvas" width="1782" height="1782" hidden></canvas>
   <script src="./editor-state.js"></script>
   <script src="./renderer.js"></script>
   <script src="./repository-source.js"></script>
