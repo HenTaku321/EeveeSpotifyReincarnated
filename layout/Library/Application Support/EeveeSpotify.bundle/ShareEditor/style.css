@@ -880,6 +880,8 @@ dialog::backdrop { background: var(--bg); opacity: 0.72; }
     overflow: hidden;
   }
 
+  .canvas-stage { min-height: 0; }
+
   .editor-grid[data-inspector-collapsed="true"] {
     grid-template-rows: minmax(0, 1fr) 44px;
   }
