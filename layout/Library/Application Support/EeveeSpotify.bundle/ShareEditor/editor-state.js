@@ -14,6 +14,10 @@
   const FONT_TYPES = Object.freeze(["classic", "wide", "narrow", "slanted"]);
   const TEXT_ALIGNMENTS = Object.freeze(["center", "leading", "trailing"]);
   const CAPS_MODES = Object.freeze(["normal", "allCaps"]);
+  // Card templates: skeleton keeps the legacy layout, lyrics (default) is the
+  // lyrics-dominant layout, poster bleeds the cover art into the background.
+  const CARD_TEMPLATES = Object.freeze(["skeleton", "lyrics", "poster"]);
+  const PROJECT_VERSION = 2;
   const MAX_SELECTED_LINES = 6;
   const HISTORY_LIMIT = 80;
   // Keep embedded resources bounded before they reach Canvas/Image decoding.
@@ -27,7 +31,8 @@
   const MAX_IMAGE_DIMENSION = 8192;
   const MAX_IMAGE_PIXELS = 16 * 1024 * 1024;
   const MAX_LYRICS_LINES = 5000;
-  const MAX_ALTERNATIVES = 16;
+  const MAX_OPAQUE_JSON_DEPTH = 64;
+  const MAX_OPAQUE_JSON_NODES = 100000;
   const MAX_LINE_TEXT_CHARS = 20000;
   const MAX_LYRICS_TEXT_BYTES = 4 * 1024 * 1024;
 
@@ -39,6 +44,39 @@
 
   function asString(value, fallback) {
     return typeof value === "string" ? value.trim() : fallback;
+  }
+
+  function findMatchingOpenIndex(text, openChar, closeChar) {
+    let depth = 0;
+    for (let index = text.length - 1; index >= 0; index -= 1) {
+      if (text[index] === closeChar) depth += 1;
+      else if (text[index] === openChar) {
+        depth -= 1;
+        if (depth === 0) return index;
+      }
+    }
+    return -1;
+  }
+
+  function splitTranslation(words) {
+    const raw = String(words == null ? "" : words).replace(/\s+$/, "");
+    const pair = raw.endsWith(")")
+      ? { open: "(", close: ")" }
+      : raw.endsWith("）")
+        ? { open: "（", close: "）" }
+        : null;
+    if (!pair) return { raw, base: raw, translation: "" };
+    const openIndex = findMatchingOpenIndex(raw, pair.open, pair.close);
+    if (openIndex <= 0) return { raw, base: raw, translation: "" };
+    const base = raw.slice(0, openIndex).replace(/\s+$/, "");
+    const translation = raw.slice(openIndex + 1, -1).trim();
+    return base && translation ? { raw, base, translation } : { raw, base: raw, translation: "" };
+  }
+
+  function buildWords(base, translation) {
+    const left = String(base == null ? "" : base);
+    const right = String(translation == null ? "" : translation).trim();
+    return right ? `${left}(${right})` : left;
   }
 
   function utf8ByteLength(value) {
@@ -214,25 +252,46 @@
     };
   }
 
-  function normalizeAlternative(alternative, lineCount) {
-    if (!isPlainObject(alternative) || !Array.isArray(alternative.lines)) return null;
-    const lines = alternative.lines.slice(0, lineCount).map((line, index) => {
-      if (typeof line === "string") return line;
-      if (isPlainObject(line)) {
-        if (typeof line.words === "string") return line.words;
-        if (typeof line.text === "string") return line.text;
-      }
-      return "";
-    });
-    lines.forEach((line, index) => {
-      if (line.length > MAX_LINE_TEXT_CHARS) throw new RangeError(`alternative.lines[${index}] is too long`);
-    });
-    while (lines.length < lineCount) lines.push("");
-    return {
-      language: asString(alternative.language, ""),
-      isRtlLanguage: Boolean(alternative.isRtlLanguage),
-      lines,
-    };
+  function cloneJSONValue(value, path, ancestors, depth, budget) {
+    const currentDepth = Number(depth) || 0;
+    const currentBudget = budget || { nodes: 0 };
+    currentBudget.nodes += 1;
+    if (currentDepth > MAX_OPAQUE_JSON_DEPTH) throw new RangeError(`${path} exceeds the nesting limit`);
+    if (currentBudget.nodes > MAX_OPAQUE_JSON_NODES) throw new RangeError(`${path} exceeds the node limit`);
+    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+    if (typeof value === "number") {
+      if (Number.isFinite(value)) return value;
+      throw new TypeError(`${path} must contain valid JSON values`);
+    }
+    if (!Array.isArray(value) && !isPlainObject(value)) {
+      throw new TypeError(`${path} must contain valid JSON values`);
+    }
+
+    const active = ancestors || new WeakSet();
+    if (active.has(value)) throw new TypeError(`${path} must not contain cycles`);
+    active.add(value);
+    let clone;
+    if (Array.isArray(value)) {
+      clone = value.map((item, index) => cloneJSONValue(
+        item,
+        `${path}[${index}]`,
+        active,
+        currentDepth + 1,
+        currentBudget,
+      ));
+    } else {
+      clone = {};
+      Object.keys(value).forEach((key) => {
+        Object.defineProperty(clone, key, {
+          value: cloneJSONValue(value[key], `${path}.${key}`, active, currentDepth + 1, currentBudget),
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      });
+    }
+    active.delete(value);
+    return clone;
   }
 
   function normalizeSelectedIndices(value, lines, useDefault) {
@@ -272,12 +331,13 @@
     const lines = rawLyrics.lines.map(normalizeLine);
     if (lines.length === 0) throw new TypeError("document.lyrics.lines cannot be empty");
 
-    const alternatives = Array.isArray(rawLyrics.alternatives)
-      ? rawLyrics.alternatives.slice(0, MAX_ALTERNATIVES).map((item) => normalizeAlternative(item, lines.length)).filter(Boolean)
-      : [];
+    const hasAlternatives = Object.prototype.hasOwnProperty.call(rawLyrics, "alternatives");
+    let alternatives;
+    if (hasAlternatives) {
+      alternatives = cloneJSONValue(rawLyrics.alternatives, "document.lyrics.alternatives");
+    }
     const lyricsTextBytes = lines.reduce((total, line) => total + utf8ByteLength(line.text), 0)
-      + alternatives.reduce((total, alternative) => total
-        + alternative.lines.reduce((lineTotal, line) => lineTotal + utf8ByteLength(line), 0), 0);
+      + (hasAlternatives ? utf8ByteLength(JSON.stringify(alternatives)) : 0);
     if (lyricsTextBytes > MAX_LYRICS_TEXT_BYTES) throw new RangeError("document lyrics text exceeds the limit");
     const outerColors = isPlainObject(input.colors)
       ? input.colors
@@ -316,7 +376,7 @@
         language: asString(rawLyrics.language, ""),
         isRtlLanguage: Boolean(rawLyrics.isRtlLanguage),
         lines,
-        alternatives,
+        ...(hasAlternatives ? { alternatives } : {}),
       },
       colors: {
         background: normalizeHexColor(outerColors.background, "#498cb7"),
@@ -345,6 +405,7 @@
         false,
       ),
       edits: Object.create(null),
+      template: CARD_TEMPLATES.includes(overrides.template) ? overrides.template : "lyrics",
       style: {
         textColor: normalizeHexColor(initialStyle.textColor, document.colors.text),
         backgroundColor: normalizeHexColor(initialStyle.backgroundColor, document.colors.background),
@@ -372,10 +433,11 @@
   }
 
   function getSelectedLines(state) {
-    return state.selectedLineIndices.map((index) => ({
-      index,
-      text: selectedLineText(state, index),
-    }));
+    return state.selectedLineIndices.map((index) => {
+      const text = selectedLineText(state, index);
+      const parts = splitTranslation(text);
+      return { index, text, base: parts.base, translation: parts.translation };
+    });
   }
 
   function replaceSticker(stickers, id, updater) {
@@ -492,6 +554,11 @@
         if (action.key === "capsMode" && !CAPS_MODES.includes(value)) return state;
         if (state.style[action.key] === value) return state;
         return { ...state, style: { ...state.style, [action.key]: value } };
+      }
+      case "setTemplate": {
+        if (!CARD_TEMPLATES.includes(action.template)) return state;
+        if (state.template === action.template) return state;
+        return { ...state, template: action.template };
       }
       case "setPalette": {
         const backgroundColor = normalizeHexColor(action.backgroundColor, state.style.backgroundColor);
@@ -611,11 +678,17 @@
       throw new TypeError("editor state is invalid");
     }
     assertStateResourceBudget(state);
+    const document = cloneJSONValue(state.document, "document");
+    document.lyrics.lines = state.document.lyrics.lines.map((line) => ({
+      words: selectedLineText(state, line.index),
+      startTimeMs: line.startTimeMs,
+      endTimeMs: line.endTimeMs,
+    }));
     const serialized = JSON.stringify({
-      version: 1,
-      document: state.document,
+      version: PROJECT_VERSION,
+      document,
       selectedLineIndices: state.selectedLineIndices,
-      edits: state.edits,
+      template: state.template,
       style: state.style,
       media: state.media,
       stickers: state.stickers,
@@ -635,7 +708,7 @@
       if (utf8ByteLength(encoded) > MAX_PROJECT_BYTES) throw new RangeError("项目文件大小超过限制");
       payload = serialized;
     }
-    if (!isPlainObject(payload) || payload.version !== 1) {
+    if (!isPlainObject(payload) || (payload.version !== 1 && payload.version !== PROJECT_VERSION)) {
       throw new TypeError("unsupported editor state version");
     }
     const document = normalizeDocument(payload.document);
@@ -643,9 +716,10 @@
       document,
       selectedLineIndices: payload.selectedLineIndices,
       style: payload.style,
+      template: payload.template,
     });
 
-    if (isPlainObject(payload.edits)) {
+    if (payload.version === 1 && isPlainObject(payload.edits)) {
       Object.keys(payload.edits).forEach((key) => {
         const index = Number(key);
         if (typeof payload.edits[key] !== "string") return;
@@ -686,6 +760,8 @@
     FONT_TYPES,
     TEXT_ALIGNMENTS,
     CAPS_MODES,
+    CARD_TEMPLATES,
+    PROJECT_VERSION,
     MAX_SELECTED_LINES,
     MAX_STICKERS,
     MAX_IMAGE_BYTES,
@@ -700,6 +776,8 @@
     createHistory,
     getSelectedLines,
     selectedLineText,
+    splitTranslation,
+    buildWords,
     normalizeHexColor,
     utf8ByteLength,
     parseImageDataURL,

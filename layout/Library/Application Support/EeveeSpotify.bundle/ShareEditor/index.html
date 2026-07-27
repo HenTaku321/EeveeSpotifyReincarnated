@@ -4,166 +4,145 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#111513">
+  <meta name="theme-color" content="#000000">
   <title>歌词编辑器</title>
   <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=">
+  <link rel="stylesheet" href="./tokens.css">
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <div class="app" id="share-editor-app">
     <header class="app-bar">
-      <div class="brand-block">
-        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
-        <div>
-          <h1>歌词编辑器</h1>
-          <p id="document-source">GitHub Lyrics</p>
-        </div>
+      <div class="app-title">
+        <h1>歌词卡片</h1>
+        <p id="track-name">未载入曲目</p>
       </div>
 
-      <div class="history-tools" role="group" aria-label="编辑历史">
-        <button class="icon-button" id="undo-button" type="button" title="撤销" aria-label="撤销">↶</button>
-        <button class="icon-button" id="redo-button" type="button" title="重做" aria-label="重做">↷</button>
-        <button class="icon-button mobile-project-button" id="mobile-project-button" type="button" title="项目菜单" aria-label="打开项目菜单" aria-expanded="false">⋯</button>
+      <div class="app-bar-actions" role="group" aria-label="编辑历史与菜单">
+        <button class="icon-button" id="undo-button" type="button" title="撤销" aria-label="撤销"><span class="icon-slot" data-icon="undo"></span></button>
+        <button class="icon-button" id="redo-button" type="button" title="重做" aria-label="重做"><span class="icon-slot" data-icon="redo"></span></button>
+        <button class="icon-button" id="mobile-project-button" type="button" title="更多操作" aria-label="打开项目菜单" aria-haspopup="true" aria-expanded="false"><span class="icon-slot" data-icon="more"></span></button>
       </div>
 
       <div class="app-actions">
-        <button class="secondary-button" id="load-button" type="button">载入歌词</button>
-        <button class="secondary-button" id="project-menu-button" type="button">保存项目</button>
-        <label class="secondary-button file-label" for="project-input">打开项目</label>
+        <button class="menu-item" id="load-button" type="button"><span class="icon-slot" data-icon="folder"></span>载入歌词</button>
+        <button class="menu-item" id="project-menu-button" type="button"><span class="icon-slot" data-icon="save"></span>保存项目</button>
+        <label class="menu-item file-label" for="project-input"><span class="icon-slot" data-icon="plus"></span>打开项目</label>
         <input id="project-input" type="file" accept="application/json,.json" hidden>
       </div>
     </header>
 
     <nav class="mobile-tool-dock" role="tablist" aria-label="编辑工具">
-      <button type="button" class="is-active" role="tab" aria-selected="true" data-mobile-tool="lyrics"><span aria-hidden="true">≡</span><small>歌词</small></button>
-      <button type="button" role="tab" aria-selected="false" data-mobile-tool="type"><span class="type-icon" aria-hidden="true">Aa</span><small>字体</small></button>
-      <button type="button" role="tab" aria-selected="false" data-mobile-tool="layout"><span aria-hidden="true">▦</span><small>排版</small></button>
-      <button type="button" role="tab" aria-selected="false" data-mobile-tool="media"><span aria-hidden="true">▧</span><small>图像</small></button>
-      <button type="button" role="tab" aria-selected="false" data-mobile-tool="stickers"><span aria-hidden="true">✦</span><small>贴纸</small></button>
-      <button type="button" role="tab" aria-selected="false" data-mobile-tool="export"><span aria-hidden="true">⇧</span><small>导出</small></button>
+      <button type="button" class="is-active" role="tab" aria-selected="true" data-mobile-tool="lyrics"><span class="icon-slot" data-icon="lyrics"></span><small>歌词</small></button>
+      <button type="button" role="tab" aria-selected="false" data-mobile-tool="type"><span class="icon-slot" data-icon="type"></span><small>字体</small></button>
+      <button type="button" role="tab" aria-selected="false" data-mobile-tool="layout"><span class="icon-slot" data-icon="layout"></span><small>排版</small></button>
+      <button type="button" role="tab" aria-selected="false" data-mobile-tool="media"><span class="icon-slot" data-icon="media"></span><small>图像</small></button>
+      <button type="button" role="tab" aria-selected="false" data-mobile-tool="stickers"><span class="icon-slot" data-icon="sticker"></span><small>贴纸</small></button>
+      <button type="button" role="tab" aria-selected="false" data-mobile-tool="export"><span class="icon-slot" data-icon="download"></span><small>导出</small></button>
     </nav>
 
     <main class="editor-grid" data-mobile-tool="lyrics">
       <section class="lyrics-panel" aria-labelledby="lyrics-heading">
         <div class="panel-heading">
-          <div>
-            <h2 id="lyrics-heading">歌词</h2>
-            <p id="selection-status">已选择 0 行</p>
-          </div>
+          <h2 id="lyrics-heading">歌词</h2>
           <span class="limit-badge" id="selection-limit">0 / 6</span>
         </div>
         <div class="lyrics-list" id="lyrics-list"></div>
       </section>
 
-      <section class="preview-panel" aria-labelledby="preview-heading">
+      <section class="preview-panel" aria-label="预览">
         <div class="preview-heading">
-          <div class="track-heading">
-            <h2 id="preview-heading">预览</h2>
-            <p id="track-summary">未载入曲目</p>
-          </div>
+          <p class="track-summary" id="track-summary">未载入曲目</p>
           <output class="status-output" id="status-output" aria-live="polite"></output>
         </div>
         <div class="canvas-stage" id="canvas-stage">
           <canvas id="preview-canvas" width="891" height="891" aria-label="歌词卡片预览"></canvas>
         </div>
+        <div class="template-switch" id="template-switch" role="group" aria-label="卡片模板">
+          <button type="button" data-template="skeleton" aria-pressed="false">骨架</button>
+          <button type="button" class="is-selected" data-template="lyrics" aria-pressed="true">歌词</button>
+          <button type="button" data-template="poster" aria-pressed="false">海报</button>
+        </div>
         <div class="export-bar" aria-label="导出工具">
           <span class="export-size">PNG · 891 × 891</span>
           <div class="export-actions">
-            <button class="secondary-button" id="download-button" type="button">保存 PNG</button>
-            <button class="primary-button" id="share-button" type="button">系统分享</button>
+            <button class="pill-button secondary" id="share-button" type="button" hidden><span class="icon-slot" data-icon="share"></span>系统分享</button>
+            <button class="pill-button primary" id="download-button" type="button"><span class="icon-slot" data-icon="download"></span>保存 PNG</button>
           </div>
         </div>
       </section>
 
-      <aside class="inspector" aria-label="编辑工具">
-        <div class="tool-tabs" role="tablist" aria-label="编辑工具">
-          <button class="tool-tab is-active" id="tab-style" type="button" role="tab" aria-selected="true" aria-controls="panel-style" data-panel="style">样式</button>
-          <button class="tool-tab" id="tab-media" type="button" role="tab" aria-selected="false" aria-controls="panel-media" data-panel="media">图像</button>
-          <button class="tool-tab" id="tab-stickers" type="button" role="tab" aria-selected="false" aria-controls="panel-stickers" data-panel="stickers">贴纸</button>
-        </div>
-
-        <section class="tool-panel is-active" id="panel-style" role="tabpanel" aria-labelledby="tab-style">
-          <fieldset data-mobile-tool="layout">
-            <legend>配色</legend>
-            <div class="swatch-row" id="color-presets">
-              <button type="button" class="color-swatch is-selected" data-background="#498cb7" data-text="#05090e" style="--swatch:#498cb7" title="湖蓝" aria-label="湖蓝配色"></button>
-              <button type="button" class="color-swatch" data-background="#f1d44b" data-text="#17150d" style="--swatch:#f1d44b" title="明黄" aria-label="明黄配色"></button>
-              <button type="button" class="color-swatch" data-background="#e96f58" data-text="#1d100d" style="--swatch:#e96f58" title="珊瑚" aria-label="珊瑚配色"></button>
-              <button type="button" class="color-swatch" data-background="#1f2a25" data-text="#f5f7f5" style="--swatch:#1f2a25" title="深绿" aria-label="深绿配色"></button>
-              <button type="button" class="color-swatch" data-background="#f4f5f2" data-text="#121513" style="--swatch:#f4f5f2" title="白色" aria-label="白色配色"></button>
-            </div>
-            <div class="color-inputs">
-              <label>背景<input id="background-color" type="color" value="#498cb7"></label>
-              <label>文字<input id="text-color" type="color" value="#05090e"></label>
-              <label>遮罩<input id="tint-color" type="color" value="#000000"></label>
-            </div>
-          </fieldset>
-
-          <fieldset data-mobile-tool="type">
-            <legend>字体</legend>
-            <div class="segmented-control font-control" data-control="fontType">
-              <button type="button" class="is-selected font-classic" data-value="classic">Classic</button>
-              <button type="button" class="font-wide" data-value="wide">Wide</button>
-              <button type="button" class="font-narrow" data-value="narrow">Narrow</button>
-              <button type="button" class="font-slanted" data-value="slanted">Slanted</button>
-            </div>
-          </fieldset>
-
-          <fieldset data-mobile-tool="layout">
-            <legend>排版</legend>
-            <div class="segmented-control" data-control="textAlignment">
-              <button type="button" class="is-selected" data-value="leading">靠前</button>
-              <button type="button" data-value="center">居中</button>
-              <button type="button" data-value="trailing">靠后</button>
-            </div>
-            <label class="toggle-row">
-              <span>全部大写</span>
-              <input id="caps-toggle" type="checkbox" role="switch">
-            </label>
-          </fieldset>
+      <aside class="inspector" aria-label="样式工具">
+        <section class="tool-section" data-mobile-tool="layout" aria-labelledby="section-color-title">
+          <h3 class="tool-section-title" id="section-color-title">配色</h3>
+          <div class="swatch-row" id="color-presets">
+            <button type="button" class="color-swatch is-selected" data-background="#498cb7" data-text="#05090e" style="--swatch:#498cb7" title="湖蓝" aria-label="湖蓝配色"></button>
+            <button type="button" class="color-swatch" data-background="#f1d44b" data-text="#17150d" style="--swatch:#f1d44b" title="明黄" aria-label="明黄配色"></button>
+            <button type="button" class="color-swatch" data-background="#e96f58" data-text="#1d100d" style="--swatch:#e96f58" title="珊瑚" aria-label="珊瑚配色"></button>
+            <button type="button" class="color-swatch" data-background="#1f2a25" data-text="#f5f7f5" style="--swatch:#1f2a25" title="深绿" aria-label="深绿配色"></button>
+            <button type="button" class="color-swatch" data-background="#f4f5f2" data-text="#121513" style="--swatch:#f4f5f2" title="白色" aria-label="白色配色"></button>
+          </div>
+          <div class="color-inputs">
+            <label class="color-input-row"><span>背景</span><input id="background-color" type="color" value="#498cb7"></label>
+            <label class="color-input-row"><span>文字</span><input id="text-color" type="color" value="#05090e"></label>
+            <label class="color-input-row"><span>遮罩</span><input id="tint-color" type="color" value="#000000"></label>
+          </div>
         </section>
 
-        <section class="tool-panel" id="panel-media" role="tabpanel" aria-labelledby="tab-media" hidden>
-          <fieldset data-mobile-tool="media">
-            <legend>背景图</legend>
-            <label class="file-drop" for="background-input">
-              <span class="file-drop-icon" aria-hidden="true">▧</span>
-              <span id="background-file-name">选择本地图片</span>
-            </label>
-            <input id="background-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
-            <button class="danger-button" id="remove-background" type="button" disabled>移除背景</button>
-          </fieldset>
-
-          <fieldset data-mobile-tool="media">
-            <legend>专辑封面</legend>
-            <label class="file-drop compact" for="cover-input">
-              <span class="file-drop-icon" aria-hidden="true">◩</span>
-              <span id="cover-file-name">选择本地封面</span>
-            </label>
-            <input id="cover-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
-            <button class="danger-button" id="remove-cover" type="button" disabled>恢复曲目封面</button>
-          </fieldset>
+        <section class="tool-section" data-mobile-tool="type" aria-labelledby="section-font-title">
+          <h3 class="tool-section-title" id="section-font-title">字体</h3>
+          <div class="font-grid" data-control="fontType" role="group" aria-label="卡片字体">
+            <button type="button" class="font-card font-classic is-selected" data-value="classic"><span class="font-sample" aria-hidden="true">Aa</span><span class="font-name">Classic</span></button>
+            <button type="button" class="font-card font-wide" data-value="wide"><span class="font-sample" aria-hidden="true">Aa</span><span class="font-name">Wide</span></button>
+            <button type="button" class="font-card font-narrow" data-value="narrow"><span class="font-sample" aria-hidden="true">Aa</span><span class="font-name">Narrow</span></button>
+            <button type="button" class="font-card font-slanted" data-value="slanted"><span class="font-sample" aria-hidden="true">Aa</span><span class="font-name">Slanted</span></button>
+          </div>
         </section>
 
-        <section class="tool-panel" id="panel-stickers" role="tabpanel" aria-labelledby="tab-stickers" hidden>
-          <fieldset data-mobile-tool="stickers">
-            <legend>添加贴纸</legend>
-            <div class="sticker-palette" id="sticker-palette">
-              <button type="button" data-glyph="✦" data-color="#f1d44b" title="星光贴纸" aria-label="添加星光贴纸">✦</button>
-              <button type="button" data-glyph="♥" data-color="#e96f58" title="爱心贴纸" aria-label="添加爱心贴纸">♥</button>
-              <button type="button" data-glyph="♪" data-color="#a7f3c8" title="音符贴纸" aria-label="添加音符贴纸">♪</button>
-            </div>
-            <label class="file-drop compact" for="sticker-input">
-              <span class="file-drop-icon" aria-hidden="true">＋</span>
-              <span>本地贴纸</span>
-            </label>
-            <input id="sticker-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
-          </fieldset>
-          <fieldset data-mobile-tool="stickers">
-            <legend>当前贴纸</legend>
-            <div class="sticker-summary" id="sticker-summary">未选择贴纸</div>
-            <button class="danger-button" id="delete-sticker" type="button" disabled>删除贴纸</button>
-          </fieldset>
+        <section class="tool-section" data-mobile-tool="layout" aria-labelledby="section-layout-title">
+          <h3 class="tool-section-title" id="section-layout-title">排版</h3>
+          <div class="segmented-pill" data-control="textAlignment" role="group" aria-label="对齐">
+            <button type="button" class="is-selected" data-value="leading">靠前</button>
+            <button type="button" data-value="center">居中</button>
+            <button type="button" data-value="trailing">靠后</button>
+          </div>
+          <label class="toggle-row">
+            <span>全部大写</span>
+            <input id="caps-toggle" type="checkbox" role="switch">
+          </label>
+        </section>
+
+        <section class="tool-section" data-mobile-tool="media" aria-labelledby="section-media-title">
+          <h3 class="tool-section-title" id="section-media-title">图像</h3>
+          <label class="file-drop" for="background-input">
+            <span class="file-drop-icon icon-slot" data-icon="media" aria-hidden="true"></span>
+            <span class="file-drop-text"><span class="file-drop-title">背景图</span><span class="file-drop-name" id="background-file-name">选择本地图片</span></span>
+          </label>
+          <input id="background-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+          <button class="ghost-danger" id="remove-background" type="button" disabled>移除背景</button>
+
+          <label class="file-drop" for="cover-input">
+            <span class="file-drop-icon icon-slot" data-icon="media" aria-hidden="true"></span>
+            <span class="file-drop-text"><span class="file-drop-title">专辑封面</span><span class="file-drop-name" id="cover-file-name">选择本地封面</span></span>
+          </label>
+          <input id="cover-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+          <button class="ghost-danger" id="remove-cover" type="button" disabled>恢复曲目封面</button>
+        </section>
+
+        <section class="tool-section" data-mobile-tool="stickers" aria-labelledby="section-stickers-title">
+          <h3 class="tool-section-title" id="section-stickers-title">贴纸</h3>
+          <div class="sticker-palette" id="sticker-palette">
+            <button type="button" data-glyph="✦" data-color="#f1d44b" title="星光贴纸" aria-label="添加星光贴纸">✦</button>
+            <button type="button" data-glyph="♥" data-color="#e96f58" title="爱心贴纸" aria-label="添加爱心贴纸">♥</button>
+            <button type="button" data-glyph="♪" data-color="#a7f3c8" title="音符贴纸" aria-label="添加音符贴纸">♪</button>
+          </div>
+          <label class="file-drop" for="sticker-input">
+            <span class="file-drop-icon icon-slot" data-icon="plus" aria-hidden="true"></span>
+            <span class="file-drop-text"><span class="file-drop-title">本地贴纸</span><span class="file-drop-name">PNG · JPEG · WebP</span></span>
+          </label>
+          <input id="sticker-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+          <div class="sticker-summary" id="sticker-summary">未选择贴纸</div>
+          <button class="ghost-danger" id="delete-sticker" type="button" disabled>删除贴纸</button>
         </section>
       </aside>
     </main>
@@ -172,22 +151,36 @@
   <dialog id="source-dialog" aria-labelledby="source-dialog-title">
     <form method="dialog" id="source-form">
       <div class="dialog-heading">
-        <div>
+        <div class="dialog-title">
           <h2 id="source-dialog-title">载入 GitHub 歌词</h2>
-          <p>Track identity</p>
+          <p id="repository-path">lyrics /</p>
         </div>
-        <button class="icon-button" type="button" id="close-source-dialog" title="关闭" aria-label="关闭">×</button>
+        <button class="icon-button" type="button" id="close-source-dialog" title="关闭" aria-label="关闭"><span class="icon-slot" data-icon="close"></span></button>
       </div>
-      <div class="source-fields">
-        <label>Track ID<input name="trackId" autocomplete="off" required></label>
-        <label>歌曲名<input name="title" autocomplete="off" required></label>
-        <label>艺术家<input name="artist" autocomplete="off" required></label>
-        <label>专辑<input name="album" autocomplete="off" required></label>
-        <label class="span-two">访问令牌<input name="token" type="password" autocomplete="off"></label>
+      <div class="repository-auth">
+        <label><span>访问令牌</span><input name="token" type="password" autocomplete="off" placeholder="X-MITM-Lyrics-Token"></label>
+        <button class="pill-button secondary" type="button" id="repository-refresh">读取仓库</button>
       </div>
+      <div class="repository-toolbar">
+        <button class="icon-button" type="button" id="repository-up" title="上一级" aria-label="上一级"><span class="icon-slot" data-icon="arrowUp"></span></button>
+        <label class="repository-search"><span class="icon-slot" data-icon="search" aria-hidden="true"></span><input id="repository-search" type="search" autocomplete="off" placeholder="筛选当前目录"></label>
+      </div>
+      <div class="repository-list" id="repository-list" role="listbox" aria-label="Lyrics Repo 文件">
+        <p class="repository-empty">填写令牌后读取 Lyrics Repo</p>
+      </div>
+      <output class="repository-status" id="repository-status" aria-live="polite"></output>
+      <details class="advanced-source">
+        <summary>高级：按当前曲目信息载入</summary>
+        <div class="source-fields">
+          <label><span>Track ID</span><input name="trackId" autocomplete="off"></label>
+          <label><span>歌曲名</span><input name="title" autocomplete="off"></label>
+          <label><span>艺术家</span><input name="artist" autocomplete="off"></label>
+          <label><span>专辑</span><input name="album" autocomplete="off"></label>
+        </div>
+        <button class="pill-button secondary advanced-load-button" type="submit">按曲目信息载入</button>
+      </details>
       <div class="dialog-actions">
-        <button class="secondary-button" type="button" id="cancel-source-dialog">取消</button>
-        <button class="primary-button" type="submit">载入</button>
+        <button class="pill-button secondary" type="button" id="cancel-source-dialog">取消</button>
       </div>
     </form>
   </dialog>
@@ -195,6 +188,8 @@
   <canvas id="export-canvas" width="891" height="891" hidden></canvas>
   <script src="./editor-state.js"></script>
   <script src="./renderer.js"></script>
+  <script src="./repository-source.js"></script>
+  <script src="./icons.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>

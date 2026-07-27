@@ -7,7 +7,13 @@
   const Renderer = typeof module === "object" && module.exports
     ? require("./renderer.js")
     : root.ShareEditorRenderer;
-  const api = factory(root, State, Renderer);
+  const RepositorySource = typeof module === "object" && module.exports
+    ? require("./repository-source.js")
+    : root.LyricsRepositorySource;
+  const Icons = typeof module === "object" && module.exports
+    ? require("./icons.js")
+    : root.LyricsEditorIcons;
+  const api = factory(root, State, Renderer, RepositorySource, Icons);
 
   if (typeof module === "object" && module.exports) {
     module.exports = api;
@@ -22,7 +28,7 @@
       api.mount();
     }
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (root, State, Renderer) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (root, State, Renderer, RepositorySource, Icons) {
   "use strict";
 
   if (!State || !Renderer) throw new Error("ShareEditor state and renderer are required");
@@ -31,7 +37,7 @@
   const MAX_IMAGE_BYTES = State.MAX_IMAGE_BYTES;
   const MAX_PROJECT_BYTES = State.MAX_PROJECT_BYTES;
   const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
-  const MAX_PREVIEW_CSS_SIZE = 580;
+  const MAX_PREVIEW_CSS_SIZE = 560;
   const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
   const DEMO_DOCUMENT = Object.freeze({
     source: "github",
@@ -80,7 +86,7 @@
       loadDocument(document) {
         return Promise.resolve(applyDocument(document));
       },
-      async loadFromServer(query, token) {
+      async fetchFromServer(query, token) {
         if (typeof fetchImpl !== "function") throw new Error("fetch is unavailable");
         const track = query && query.track;
         if (!track || typeof track.trackId !== "string" || !track.trackId.trim()) {
@@ -119,7 +125,10 @@
         if (!response.ok || !payload || payload.ok === false) {
           throw new Error(payload && payload.error ? String(payload.error) : `歌词载入失败 (${response.status})`);
         }
-        return applyDocument(payload);
+        return payload;
+      },
+      async loadFromServer(query, token) {
+        return applyDocument(await this.fetchFromServer(query, token));
       },
     });
   }
@@ -171,9 +180,19 @@
     });
   }
 
+  // 海报模板在绘制时把曲目封面派生为铺底背景。派生只发生在渲染/导出调用点，
+  // 绝不写回 history state，否则 serializeState 会把封面底图粘进项目文件。
+  function effectiveMediaState(state) {
+    if (!state || state.template !== "poster") return state;
+    if (state.media.background && state.media.background.src) return state;
+    if (state.media.useTrackArtworkAsBackground) return state;
+    return { ...state, media: { ...state.media, useTrackArtworkAsBackground: true } };
+  }
+
   class ImageCache {
     constructor() {
       this.cache = new Map();
+      this.lumaCache = new Map();
     }
 
     get(source) {
@@ -187,6 +206,7 @@
     release(source) {
       const pending = this.cache.get(source);
       this.cache.delete(source);
+      this.lumaCache.delete(source);
       if (!pending) return;
       pending.then((image) => {
         if (!image) return;
@@ -198,6 +218,32 @@
 
     clear() {
       Array.from(this.cache.keys()).forEach((source) => this.release(source));
+    }
+
+    // 封面平均亮度（Rec.709 加权），经 16×16 scratch canvas 降采样，按 src 记忆化。
+    // 海报模板用它自适应遮罩强度；采样失败（如画布被污染）回退 undefined，
+    // 渲染层照旧使用固定遮罩。
+    coverLuma(source, image) {
+      if (!source || !image) return undefined;
+      if (this.lumaCache.has(source)) return this.lumaCache.get(source);
+      let luma;
+      try {
+        const scratch = document.createElement("canvas");
+        scratch.width = 16;
+        scratch.height = 16;
+        const ctx = scratch.getContext("2d");
+        ctx.drawImage(image, 0, 0, 16, 16);
+        const data = ctx.getImageData(0, 0, 16, 16).data;
+        let total = 0;
+        for (let index = 0; index < data.length; index += 4) {
+          total += 0.2126 * data[index] + 0.7152 * data[index + 1] + 0.0722 * data[index + 2];
+        }
+        luma = total / (data.length / 4) / 255;
+      } catch (_error) {
+        luma = undefined;
+      }
+      this.lumaCache.set(source, luma);
+      return luma;
     }
 
     async resolve(state) {
@@ -221,6 +267,7 @@
       return {
         background,
         cover,
+        coverLuma: this.coverLuma(coverSource, cover),
         stickers: new Map(stickerEntries.filter((entry) => entry[1])),
       };
     }
@@ -351,6 +398,10 @@
       this.resources = { background: null, cover: null, stickers: new Map() };
       this.renderGeneration = 0;
       this.gesture = null;
+      // 行编辑展开是纯局部 UI 状态：不进 history，也不参与序列化。
+      this.expandedLineIndex = null;
+      this.repositoryPath = "lyrics";
+      this.repositoryEntries = [];
       this.gateway = createDocumentGateway({
         fetchImpl: root.fetch ? root.fetch.bind(root) : null,
         applyDocument: (document) => this.loadDocument(document),
@@ -362,12 +413,13 @@
 
     collectElements() {
       const ids = [
-        "document-source", "undo-button", "redo-button", "mobile-project-button", "load-button", "project-menu-button", "project-input",
-        "selection-status", "selection-limit", "lyrics-list", "track-summary", "status-output", "canvas-stage", "preview-canvas",
+        "track-name", "undo-button", "redo-button", "mobile-project-button", "load-button", "project-menu-button", "project-input",
+        "selection-limit", "lyrics-list", "track-summary", "status-output", "canvas-stage", "preview-canvas", "template-switch",
         "export-canvas", "download-button", "share-button", "background-color", "text-color", "tint-color",
         "caps-toggle", "background-input", "background-file-name", "remove-background", "cover-input",
         "cover-file-name", "remove-cover", "sticker-palette", "sticker-input", "sticker-summary", "delete-sticker",
-        "source-dialog", "source-form", "close-source-dialog", "cancel-source-dialog",
+        "source-dialog", "source-form", "close-source-dialog", "cancel-source-dialog", "repository-path",
+        "repository-refresh", "repository-up", "repository-search", "repository-list", "repository-status",
       ];
       return Object.fromEntries(ids.map((id) => [id.replace(/-([a-z])/g, (_match, character) => character.toUpperCase()), document.getElementById(id)]));
     }
@@ -423,10 +475,18 @@
         document.querySelector(".app-actions").classList.remove("is-open");
         e.mobileProjectButton.setAttribute("aria-expanded", "false");
       });
-      e.loadButton.addEventListener("click", () => e.sourceDialog.showModal());
+      e.loadButton.addEventListener("click", () => this.openSourceDialog());
       e.closeSourceDialog.addEventListener("click", () => e.sourceDialog.close());
       e.cancelSourceDialog.addEventListener("click", () => e.sourceDialog.close());
       e.sourceForm.addEventListener("submit", (event) => this.handleSourceSubmit(event));
+      e.repositoryRefresh.addEventListener("click", () => this.loadRepositoryDirectory(this.repositoryPath));
+      e.repositoryUp.addEventListener("click", () => this.loadRepositoryDirectory(this.parentRepositoryPath()));
+      e.repositorySearch.addEventListener("input", () => this.renderRepositoryEntries());
+      e.repositoryList.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-repository-path]");
+        if (button) this.openRepositoryEntry(button.dataset.repositoryPath, button.dataset.repositoryType);
+      });
+      root.addEventListener("message", (event) => this.handleBootstrapMessage(event));
       e.projectMenuButton.addEventListener("click", () => this.saveProject());
       e.projectInput.addEventListener("change", (event) => this.openProject(event));
       e.downloadButton.addEventListener("click", () => this.exportImage("save"));
@@ -446,18 +506,20 @@
       e.tintColor.addEventListener("input", (event) => this.execute({ type: "setStyle", key: "backgroundTintedColor", value: event.target.value }, false));
       e.capsToggle.addEventListener("change", (event) => this.execute({ type: "setStyle", key: "capsMode", value: event.target.checked ? "allCaps" : "normal" }, false));
 
-      document.querySelectorAll(".tool-tab").forEach((button) => {
-        button.addEventListener("click", () => this.activateToolPanel(button.dataset.panel));
-      });
       document.querySelectorAll(".mobile-tool-dock button[data-mobile-tool]").forEach((button) => {
         button.addEventListener("click", () => this.activateMobileTool(button.dataset.mobileTool));
       });
-      document.querySelectorAll(".segmented-control").forEach((control) => {
+      document.querySelectorAll("[data-control]").forEach((control) => {
         control.addEventListener("click", (event) => {
           const button = event.target.closest("button[data-value]");
           if (!button) return;
           this.execute({ type: "setStyle", key: control.dataset.control, value: button.dataset.value }, false);
         });
+      });
+      e.templateSwitch.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-template]");
+        if (!button) return;
+        this.execute({ type: "setTemplate", template: button.dataset.template }, false);
       });
       document.getElementById("color-presets").addEventListener("click", (event) => {
         const button = event.target.closest("button[data-background]");
@@ -483,6 +545,7 @@
     loadDocument(documentInput) {
       const document = State.normalizeDocument(documentInput);
       this.imageCache.clear();
+      this.expandedLineIndex = null;
       this.history.reset(State.createEditorState(document));
       this.setStatus("歌词已载入");
       this.renderAll({ rebuildLyrics: true });
@@ -492,6 +555,7 @@
     restoreState(serialized) {
       const state = State.restoreState(serialized);
       this.imageCache.clear();
+      this.expandedLineIndex = null;
       this.history.reset(state);
       this.setStatus("项目已恢复");
       this.renderAll({ rebuildLyrics: true });
@@ -548,51 +612,111 @@
 
     renderLyricsList() {
       const state = this.history.state;
+      if (this.expandedLineIndex !== null && !state.selectedLineIndices.includes(this.expandedLineIndex)) {
+        this.expandedLineIndex = null;
+      }
       const fragment = document.createDocumentFragment();
       state.document.lyrics.lines.forEach((line) => {
         const selected = state.selectedLineIndices.includes(line.index);
-        const row = document.createElement("label");
-        row.className = `lyric-row${selected ? " is-selected" : ""}`;
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.className = "line-select";
-        checkbox.checked = selected;
-        checkbox.setAttribute("aria-label", `选择第 ${line.index + 1} 行`);
-        checkbox.addEventListener("change", () => this.execute({ type: "toggleLine", index: line.index }, true));
-        const content = document.createElement("span");
-        content.className = "line-content";
-        const index = document.createElement("span");
-        index.className = "line-index";
-        index.textContent = String(line.index + 1).padStart(2, "0");
-        content.appendChild(index);
+        const expanded = selected && this.expandedLineIndex === line.index;
+        const parts = State.splitTranslation(State.selectedLineText(state, line.index));
+        const row = document.createElement("div");
+        row.className = `lyric-row${selected ? " is-selected" : ""}${expanded ? " is-editing" : ""}`;
+
+        const main = document.createElement("div");
+        main.className = "lyric-row-main";
+        const toggle = document.createElement("button");
+        toggle.type = "button";
+        toggle.className = "line-toggle";
+        toggle.setAttribute("aria-pressed", String(selected));
+        toggle.setAttribute("aria-label", `选择第 ${line.index + 1} 行`);
+        toggle.addEventListener("click", () => this.execute({ type: "toggleLine", index: line.index }, true));
+
+        const check = document.createElement("span");
+        check.className = "line-check";
+        const checkIcon = document.createElement("span");
+        checkIcon.className = "icon-slot";
+        checkIcon.setAttribute("data-icon", "check");
+        check.appendChild(checkIcon);
+
+        const text = document.createElement("span");
+        text.className = "line-text";
+        const baseText = document.createElement("span");
+        baseText.className = "line-text-base";
+        baseText.textContent = parts.base || "(空行)";
+        const translationText = document.createElement("span");
+        translationText.className = "line-text-translation";
+        translationText.textContent = parts.translation;
+        text.append(baseText, translationText);
+        toggle.append(check, text);
+        main.appendChild(toggle);
+
         if (selected) {
-          const editor = document.createElement("textarea");
-          editor.className = "line-editor";
-          editor.value = State.selectedLineText(state, line.index);
-          editor.rows = 2;
-          editor.dir = state.document.lyrics.isRtlLanguage ? "rtl" : "auto";
-          editor.setAttribute("aria-label", `编辑第 ${line.index + 1} 行歌词`);
-          editor.addEventListener("input", () => this.execute({ type: "setLineText", index: line.index, text: editor.value }, false));
-          content.appendChild(editor);
-        } else {
-          const text = document.createElement("span");
-          text.className = "line-text";
-          text.textContent = line.text || "(空行)";
-          content.appendChild(text);
+          const edit = document.createElement("button");
+          edit.type = "button";
+          edit.className = "line-edit-toggle";
+          edit.title = expanded ? "收起" : "编辑";
+          edit.setAttribute("aria-expanded", String(expanded));
+          edit.setAttribute("aria-label", expanded ? `收起第 ${line.index + 1} 行编辑` : `编辑第 ${line.index + 1} 行`);
+          const editIcon = document.createElement("span");
+          editIcon.className = "icon-slot";
+          editIcon.setAttribute("data-icon", expanded ? "close" : "type");
+          edit.appendChild(editIcon);
+          edit.addEventListener("click", () => {
+            this.expandedLineIndex = expanded ? null : line.index;
+            this.renderLyricsList();
+          });
+          main.appendChild(edit);
         }
-        row.append(checkbox, content);
+        row.appendChild(main);
+
+        if (expanded) {
+          const fields = document.createElement("div");
+          fields.className = "line-editor-fields";
+          const createField = (name, value) => {
+            const field = document.createElement("label");
+            field.className = `line-editor-field line-editor-field-${name === "原文" ? "base" : "translation"}`;
+            const caption = document.createElement("span");
+            caption.textContent = name;
+            const editor = document.createElement("textarea");
+            editor.className = "line-editor";
+            editor.value = value;
+            editor.rows = 2;
+            editor.dir = state.document.lyrics.isRtlLanguage ? "rtl" : "auto";
+            editor.setAttribute("aria-label", `编辑第 ${line.index + 1} 行${name}`);
+            field.append(caption, editor);
+            return { field, editor };
+          };
+          const base = createField("原文", parts.base);
+          const translation = createField("译文", parts.translation);
+          const commit = () => {
+            baseText.textContent = base.editor.value || "(空行)";
+            translationText.textContent = translation.editor.value.trim();
+            this.execute({
+              type: "setLineText",
+              index: line.index,
+              text: State.buildWords(base.editor.value, translation.editor.value),
+            }, false);
+          };
+          base.editor.addEventListener("input", commit);
+          translation.editor.addEventListener("input", commit);
+          fields.append(base.field, translation.field);
+          row.appendChild(fields);
+        }
         fragment.appendChild(row);
       });
       this.elements.lyricsList.replaceChildren(fragment);
+      if (Icons) Icons.hydrate(this.elements.lyricsList);
     }
 
     syncControls() {
       const state = this.history.state;
       const selected = state.selectedLineIndices.length;
-      this.elements.selectionStatus.textContent = `已选择 ${selected} 行`;
       this.elements.selectionLimit.textContent = `${selected} / ${State.MAX_SELECTED_LINES}`;
-      this.elements.documentSource.textContent = state.document.source === "github" ? "GitHub Lyrics" : state.document.source;
-      this.elements.trackSummary.textContent = `${state.document.track.title} · ${state.document.track.artist}`;
+      this.elements.selectionLimit.classList.toggle("is-full", selected >= State.MAX_SELECTED_LINES);
+      const trackLabel = `${state.document.track.title} · ${state.document.track.artist}`;
+      this.elements.trackName.textContent = trackLabel;
+      this.elements.trackSummary.textContent = trackLabel;
       this.elements.undoButton.disabled = !this.history.canUndo;
       this.elements.redoButton.disabled = !this.history.canRedo;
       this.elements.backgroundColor.value = state.style.backgroundColor.slice(0, 7);
@@ -611,10 +735,15 @@
       this.elements.stickerSummary.textContent = state.activeStickerId
         ? `${state.stickers.findIndex((item) => item.id === state.activeStickerId) + 1} / ${state.stickers.length}`
         : state.stickers.length ? `${state.stickers.length} 个贴纸` : "未选择贴纸";
-      document.querySelectorAll(".segmented-control").forEach((control) => {
+      document.querySelectorAll("[data-control]").forEach((control) => {
         control.querySelectorAll("button[data-value]").forEach((button) => {
           button.classList.toggle("is-selected", state.style[control.dataset.control] === button.dataset.value);
         });
+      });
+      this.elements.templateSwitch.querySelectorAll("button[data-template]").forEach((button) => {
+        const active = state.template === button.dataset.template;
+        button.classList.toggle("is-selected", active);
+        button.setAttribute("aria-pressed", String(active));
       });
       document.querySelectorAll(".color-swatch").forEach((button) => {
         button.classList.toggle("is-selected", state.style.backgroundColor === button.dataset.background);
@@ -623,23 +752,11 @@
 
     async scheduleCanvasRender(state) {
       const generation = ++this.renderGeneration;
-      const resources = await this.imageCache.resolve(state);
+      const effective = effectiveMediaState(state);
+      const resources = await this.imageCache.resolve(effective);
       if (generation !== this.renderGeneration) return;
       this.resources = resources;
-      Renderer.renderToCanvas(this.elements.previewCanvas, state, resources, { showSelection: true });
-    }
-
-    activateToolPanel(name) {
-      document.querySelectorAll(".tool-tab").forEach((button) => {
-        const active = button.dataset.panel === name;
-        button.classList.toggle("is-active", active);
-        button.setAttribute("aria-selected", String(active));
-      });
-      document.querySelectorAll(".tool-panel").forEach((panel) => {
-        const active = panel.id === `panel-${name}`;
-        panel.classList.toggle("is-active", active);
-        panel.hidden = !active;
-      });
+      Renderer.renderToCanvas(this.elements.previewCanvas, effective, resources, { showSelection: true });
     }
 
     activateMobileTool(name) {
@@ -651,8 +768,6 @@
         button.classList.toggle("is-active", active);
         button.setAttribute("aria-selected", String(active));
       });
-      if (name === "type" || name === "layout") this.activateToolPanel("style");
-      else if (name === "media" || name === "stickers") this.activateToolPanel(name);
       const inspector = document.querySelector(".inspector");
       if (inspector && name !== "lyrics" && name !== "export") inspector.scrollTop = 0;
     }
@@ -660,6 +775,148 @@
     setStatus(message, error) {
       this.elements.statusOutput.textContent = message || "";
       this.elements.statusOutput.classList.toggle("is-error", Boolean(error));
+    }
+
+    openSourceDialog() {
+      this.applyBootstrapFields(RepositorySource && RepositorySource.readBootstrap(root.location && root.location.search));
+      this.elements.sourceDialog.showModal();
+      const token = this.sourceToken();
+      if (token) this.loadRepositoryDirectory(this.repositoryPath);
+    }
+
+    applyBootstrapFields(bootstrap) {
+      const track = bootstrap && bootstrap.track;
+      if (!track) return;
+      for (const name of ["trackId", "title", "artist", "album"]) {
+        const input = this.elements.sourceForm.elements.namedItem(name);
+        if (input && !input.value) input.value = String(track[name] || "");
+      }
+    }
+
+    sourceToken() {
+      return String(this.elements.sourceForm.elements.namedItem("token")?.value || "").trim();
+    }
+
+    parentRepositoryPath() {
+      const parts = this.repositoryPath.split("/");
+      return parts.length > 1 ? parts.slice(0, -1).join("/") : "lyrics";
+    }
+
+    setRepositoryStatus(message, error) {
+      this.elements.repositoryStatus.textContent = String(message || "");
+      this.elements.repositoryStatus.classList.toggle("is-error", Boolean(error));
+    }
+
+    renderRepositoryEntries() {
+      const entries = RepositorySource.filterEntries(this.repositoryEntries, this.elements.repositorySearch.value);
+      this.elements.repositoryPath.textContent = `${this.repositoryPath} /`;
+      this.elements.repositoryUp.disabled = this.repositoryPath === "lyrics";
+      this.elements.repositoryList.replaceChildren();
+      if (!entries.length) {
+        const empty = document.createElement("p");
+        empty.className = "repository-empty";
+        empty.textContent = this.repositoryEntries.length ? "没有匹配项" : "当前目录为空";
+        this.elements.repositoryList.append(empty);
+        return;
+      }
+      for (const entry of entries) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.dataset.repositoryPath = entry.path;
+        button.dataset.repositoryType = entry.type;
+        button.setAttribute("role", "option");
+        const icon = document.createElement("span");
+        icon.className = "repository-entry-icon icon-slot";
+        icon.setAttribute("data-icon", entry.type === "dir" ? "folder" : "music");
+        const label = document.createElement("span");
+        label.className = "repository-entry-label";
+        label.textContent = entry.name;
+        const meta = document.createElement("small");
+        meta.textContent = entry.type === "dir" ? "目录" : entry.size ? `${entry.size} bytes` : "歌词文件";
+        button.append(icon, label, meta);
+        this.elements.repositoryList.append(button);
+      }
+      if (Icons) Icons.hydrate(this.elements.repositoryList);
+    }
+
+    async loadRepositoryDirectory(path) {
+      if (!RepositorySource) return;
+      const token = this.sourceToken();
+      if (!token) {
+        this.setRepositoryStatus("请先填写访问令牌", true);
+        return;
+      }
+      this.elements.repositoryRefresh.disabled = true;
+      this.setRepositoryStatus("正在读取目录…");
+      try {
+        const client = RepositorySource.createClient(root.fetch.bind(root), token);
+        const result = await client.list(path || "lyrics");
+        this.repositoryPath = result.path;
+        this.repositoryEntries = result.entries;
+        this.elements.repositorySearch.value = "";
+        this.renderRepositoryEntries();
+        this.setRepositoryStatus(`${result.entries.length} 项`);
+      } catch (error) {
+        this.setRepositoryStatus(error.message || "仓库目录读取失败", true);
+      } finally {
+        this.elements.repositoryRefresh.disabled = false;
+      }
+    }
+
+    async openRepositoryEntry(path, type) {
+      if (type === "dir") {
+        await this.loadRepositoryDirectory(path);
+        return;
+      }
+      const token = this.sourceToken();
+      if (!token) {
+        this.setRepositoryStatus("请先填写访问令牌", true);
+        return;
+      }
+      this.setRepositoryStatus("正在载入歌词…");
+      try {
+        const client = RepositorySource.createClient(root.fetch.bind(root), token);
+        const document = await client.read(path);
+        await this.gateway.loadDocument(document);
+        this.elements.sourceForm.elements.namedItem("token").value = "";
+        this.elements.sourceDialog.close();
+        this.setStatus(`已从 Lyrics Repo 载入 ${path}`);
+      } catch (error) {
+        this.setRepositoryStatus(error.message || "仓库文件读取失败", true);
+      }
+    }
+
+    async loadBootstrap(bootstrap) {
+      const track = bootstrap && bootstrap.track;
+      if (!track || !String(track.trackId || "").trim()) return false;
+      const token = String(bootstrap.token || "").trim();
+      this.applyBootstrapFields({ track });
+      if (!token) {
+        this.openSourceDialog();
+        this.setRepositoryStatus("当前曲目已填入；请填写令牌后载入", false);
+        return false;
+      }
+      this.setStatus("正在载入当前曲目…");
+      try {
+        const payload = await this.gateway.fetchFromServer({ track }, token);
+        const coverDataURL = String(bootstrap.coverDataURL || "");
+        if (coverDataURL) {
+          State.validateImageDataURL(coverDataURL);
+          payload.track = { ...(payload.track || track), coverUrl: coverDataURL };
+        }
+        this.loadDocument(payload);
+        this.setStatus("当前曲目已载入");
+        return true;
+      } catch (error) {
+        this.setStatus(error.message || "当前曲目载入失败", true);
+        return false;
+      }
+    }
+
+    handleBootstrapMessage(event) {
+      const payload = event && event.data;
+      if (!payload || event.source !== root.parent || payload.type !== "mitm-lyrics-editor-bootstrap" || payload.mode !== "share") return;
+      this.loadBootstrap(payload);
     }
 
     async handleSourceSubmit(event) {
@@ -825,7 +1082,7 @@
       if (!this.gesture || event.pointerId !== this.gesture.pointerId) return;
       const sticker = this.transformedSticker(event);
       const draft = State.reduceEditorState(this.history.state, { type: "replaceSticker", sticker });
-      Renderer.renderToCanvas(this.elements.previewCanvas, draft, this.resources, { showSelection: true });
+      Renderer.renderToCanvas(this.elements.previewCanvas, effectiveMediaState(draft), this.resources, { showSelection: true });
     }
 
     pointerUp(event) {
@@ -868,7 +1125,7 @@
     }
 
     async renderExport() {
-      const state = this.history.state;
+      const state = effectiveMediaState(this.history.state);
       let resources = await this.imageCache.resolve(state);
       Renderer.renderToCanvas(this.elements.exportCanvas, state, resources, { showSelection: false });
       try {
@@ -904,16 +1161,8 @@
           return;
         }
 
-        if (action === "share" && typeof File === "function" && navigator.share) {
-          const file = new File([blob], filename, { type: "image/png" });
-          if (!navigator.canShare || navigator.canShare({ files: [file] })) {
-            await navigator.share({ files: [file], title: this.history.state.document.track.title });
-            this.setStatus("分享已完成");
-            return;
-          }
-        }
         downloadBlob(blob, filename);
-        this.setStatus(action === "share" ? "已改为下载 PNG" : "PNG 已保存");
+        this.setStatus("PNG 已保存");
       } catch (error) {
         if (error && error.name === "AbortError") this.setStatus("");
         else this.setStatus(error.message || "PNG 导出失败", true);
@@ -953,12 +1202,23 @@
 
   function mount() {
     if (mountedController || !root.document || !root.document.getElementById("share-editor-app")) return mountedController;
+    if (Icons && typeof Icons.hydrate === "function") Icons.hydrate(root.document);
+    // 浏览器侧没有系统分享：无原生桥时隐藏 share 按钮，只留「保存 PNG」。
+    const shareButton = root.document.getElementById("share-button");
+    if (shareButton) shareButton.hidden = !nativeBridge();
     const initial = pendingState || pendingDocument || DEMO_DOCUMENT;
     mountedController = new EditorController(initial.document ? initial.document : initial);
     if (pendingState) mountedController.history.reset(pendingState);
     mountedController.renderAll({ rebuildLyrics: true });
     pendingDocument = null;
     pendingState = null;
+    const bootstrap = RepositorySource && RepositorySource.readBootstrap(root.location && root.location.search);
+    if (bootstrap && bootstrap.track && bootstrap.track.trackId) {
+      mountedController.applyBootstrapFields(bootstrap);
+    }
+    if (root.parent && root.parent !== root) {
+      try { root.parent.postMessage({ type: "mitm-lyrics-editor-ready", mode: "share" }, "*"); } catch (_) {}
+    }
     return mountedController;
   }
 
@@ -967,6 +1227,7 @@
     DEMO_DOCUMENT,
     createDocumentGateway,
     calculatePreviewSquareSize,
+    effectiveMediaState,
     safeImageSource,
     sanitizeFilename,
     publicApi,

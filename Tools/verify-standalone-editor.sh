@@ -9,6 +9,12 @@ node --check layout/Library/Application\ Support/EeveeSpotify.bundle/ShareEditor
 node --check layout/Library/Application\ Support/EeveeSpotify.bundle/TimelineEditor/app.js
 
 test -f "layout-standalone/Library/Application Support/MITMLyricsStudio.bundle/Info.plist"
+for file in index.html app.js editor-state.js renderer.js style.css icons.js repository-source.js tokens.css; do
+    test -f "layout/Library/Application Support/EeveeSpotify.bundle/ShareEditor/$file"
+done
+for file in index.html app.js editor-state.js style.css browser-host.js icons.js tokens.css; do
+    test -f "layout/Library/Application Support/EeveeSpotify.bundle/TimelineEditor/$file"
+done
 grep -Fq 'MITM_LYRICS_STANDALONE' Makefile.standalone
 grep -Fq 'Sources/EeveeSpotify/ShareEditor' Makefile.standalone
 grep -Fq 'Sources/MITMLyricsStudio' Makefile.standalone

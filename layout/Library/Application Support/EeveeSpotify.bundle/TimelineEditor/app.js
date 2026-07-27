@@ -8,10 +8,20 @@
   let future = [];
   let previewTimer = null;
   let draftTimer = null;
+  let browserHost = null;
+  let browserParentOrigin = "";
+  let browserParent = null;
   const inputIds = ["current-base", "current-translation", "current-start", "current-end", "current-syllables"];
 
   function bridge(message) {
-    try { root.webkit?.messageHandlers?.timelineEditor?.postMessage(message); } catch (_) {}
+    const nativeBridge = root.webkit?.messageHandlers?.timelineEditor;
+    if (nativeBridge && typeof nativeBridge.postMessage === "function") {
+      try { nativeBridge.postMessage(message); } catch (_) {}
+      return;
+    }
+    if (browserHost) browserHost.command(message).catch((error) => {
+      if (message.command !== "save") status(error.message || "播放器命令失败", true);
+    });
   }
 
   function status(message, error) {
@@ -38,6 +48,21 @@
   }
   function mutate(callback) { pushHistory(); callback(); render(); scheduleDraft(); }
 
+  function updateSliderFill(slider) {
+    const max = Number(slider.max) || 0;
+    const ratio = max > 0 ? Math.min(1, Math.max(0, Number(slider.value) / max)) : 0;
+    slider.style.setProperty("--slider-fill", `${ratio * 100}%`);
+  }
+
+  function setCuePill(id, on, label) {
+    const pill = $(`#${id}`);
+    if (!pill) return;
+    pill.classList.toggle("is-on", on);
+    pill.setAttribute("aria-pressed", String(on));
+    const text = $(`#${id} .pill-text`);
+    if (text) text.textContent = label;
+  }
+
   function renderTransport() {
     const player = editorState?.player || { positionMs: 0, durationMs: 0, isPlaying: false };
     const sameTrack = Boolean(editorState && player.trackId === editorState.document.track.trackId);
@@ -46,17 +71,18 @@
     const slider = $("#position-slider");
     slider.max = String(Math.max(0, Number(player.durationMs) || 0));
     slider.value = String(Math.min(Number(slider.max), Math.max(0, Number(player.positionMs) || 0)));
-    $("#play-button").textContent = player.isPlaying ? "⏸" : "▶";
+    updateSliderFill(slider);
+    $("#play-button").classList.toggle("is-playing", player.isPlaying === true);
     $("#play-button").disabled = !sameTrack || (player.isPlaying ? player.canPause !== true : player.canPlay !== true);
     $("#position-slider").disabled = !sameTrack || player.canSeek !== true;
-    $("#preview-line").disabled = !sameTrack || player.canSeek !== true || player.canPlay !== true;
+    $("#play-line").disabled = !sameTrack || player.canSeek !== true || player.canPlay !== true;
     $("#cue-start").disabled = !sameTrack;
     $("#cue-end").disabled = !sameTrack;
-    $("#cue-toggle").textContent = `打点：${editorState?.cueEnabled ? "开" : "关"}`;
+    setCuePill("cue-toggle", editorState?.cueEnabled === true, "打点");
     const wordMode = editorState?.cueWordMode === true;
     const tokens = State.cueTokens(currentViewLine()?.base || "");
     const completed = State.normalizeSyllables(currentLine()?.syllables).length;
-    $("#cue-word-toggle").textContent = wordMode ? `逐词：${Math.min(completed, tokens.length)}/${tokens.length}` : "逐词：关";
+    setCuePill("cue-word-toggle", wordMode, wordMode ? `逐词 ${Math.min(completed, tokens.length)}/${tokens.length}` : "逐词");
     $("#cue-start").textContent = wordMode ? "打下一个词" : "写入 start";
     $("#cue-end").textContent = wordMode ? "完成本行" : "写入 end";
     $("#dock-cue-primary").textContent = wordMode ? "打下一个词" : "写入 start";
@@ -194,11 +220,15 @@
   }
 
   function bind() {
+    if (root.LyricsEditorIcons) root.LyricsEditorIcons.hydrate(document);
     $("#play-button").addEventListener("click", () => bridge({ command: editorState?.player?.isPlaying ? "pause" : "play" }));
-    $("#position-slider").addEventListener("input", (event) => bridge({ command: "seek", positionMs: Number(event.target.value) || 0 }));
+    $("#position-slider").addEventListener("input", (event) => {
+      updateSliderFill(event.target);
+      bridge({ command: "seek", positionMs: Number(event.target.value) || 0 });
+    });
     $("#cue-toggle").addEventListener("click", () => { editorState.cueEnabled = !editorState.cueEnabled; renderTransport(); scheduleDraft(); });
     $("#cue-word-toggle").addEventListener("click", () => { editorState.cueWordMode = !editorState.cueWordMode; renderTransport(); scheduleDraft(); });
-    $("#cue-start").addEventListener("click", cuePrimary); $("#cue-end").addEventListener("click", cueEnd); $("#preview-line").addEventListener("click", previewCurrent); $("#next-line").addEventListener("click", moveNext);
+    $("#cue-start").addEventListener("click", cuePrimary); $("#cue-end").addEventListener("click", cueEnd); $("#play-line").addEventListener("click", previewCurrent); $("#next-line").addEventListener("click", moveNext);
     $("#add-before").addEventListener("click", addBefore);
     $("#add-after").addEventListener("click", addAfter);
     $("#delete-current").addEventListener("click", removeCurrent);
@@ -209,7 +239,6 @@
     $("#dock-add-before").addEventListener("click", addBefore);
     $("#dock-add-after").addEventListener("click", addAfter);
     $("#dock-delete-current").addEventListener("click", removeCurrent);
-    $("#dock-save").addEventListener("click", save);
     document.querySelectorAll(".mobile-workspace-tabs [data-mobile-view]").forEach((button) => {
       button.addEventListener("click", () => activateMobileView(button.dataset.mobileView));
     });
@@ -220,12 +249,15 @@
     $("#current-end").addEventListener("input", (event) => updateCurrent({ endTimeMs: event.target.value }));
     $("#current-syllables").addEventListener("input", (event) => updateCurrent({ syllables: event.target.value.split(/\r?\n/).filter(Boolean) }));
     document.addEventListener("keydown", (event) => {
-      if (!editorState?.cueEnabled || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
+      if (!editorState || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return;
       if (event.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName)) return;
+      // 行跳转与播放当前行不依赖打点模式；W/E 打点键仍只在打点开启时生效。
+      if (event.key === "ArrowDown") { event.preventDefault(); moveNext(); return; }
+      if (event.key === "ArrowUp") { event.preventDefault(); editorState.selectedIndex = Math.max(0, editorState.selectedIndex - 1); render(); scheduleDraft(); return; }
+      if (event.key.toLowerCase() === "q") { event.preventDefault(); previewCurrent(); return; }
+      if (!editorState.cueEnabled) return;
       if (event.key.toLowerCase() === "w") { event.preventDefault(); cuePrimary(); }
       if (event.key.toLowerCase() === "e") { event.preventDefault(); cueEnd(); }
-      if (event.key === "ArrowDown") { event.preventDefault(); moveNext(); }
-      if (event.key === "ArrowUp") { event.preventDefault(); editorState.selectedIndex = Math.max(0, editorState.selectedIndex - 1); render(); scheduleDraft(); }
     }, true);
   }
 
@@ -236,5 +268,33 @@
     onPlayerState(snapshot) { if (!editorState || !snapshot) return; editorState.player = { ...editorState.player, ...snapshot }; renderTransport(); },
     onSaveResult(result) { if (result?.ok) { if (result.hash) editorState.document.hash = result.hash; status("已保存"); scheduleDraft(); } else status(`保存失败：${result?.reason || "unknown"}`, true); },
   };
+
+  if (!root.webkit?.messageHandlers?.timelineEditor && root.LyricsTimelineBrowserHost) {
+    browserHost = root.LyricsTimelineBrowserHost.createHost({
+      fetchImpl: root.fetch.bind(root),
+      applyDocument(document) { root.LyricsTimelineEditor.loadDocument(document); },
+      onSaveResult(result) { root.LyricsTimelineEditor.onSaveResult(result); },
+      postPlayerCommand(command) {
+        if (browserParent && browserParentOrigin) {
+          browserParent.postMessage({ type: "mitm-lyrics-player-command", ...command }, browserParentOrigin);
+        }
+      },
+    });
+    root.addEventListener("message", (event) => {
+      const payload = event.data;
+      if (!payload || event.source !== root.parent) return;
+      if (payload.type === "mitm-lyrics-editor-bootstrap" && payload.mode === "timeline") {
+        browserParent = event.source;
+        browserParentOrigin = event.origin;
+        status("正在载入当前曲目…");
+        browserHost.bootstrap(payload).then(() => status("当前曲目已载入")).catch((error) => {
+          status(error.message || "当前曲目载入失败", true);
+        });
+      } else if (payload.type === "mitm-lyrics-player-state" && payload.snapshot) {
+        root.LyricsTimelineEditor.onPlayerState(payload.snapshot);
+      }
+    });
+    try { root.parent.postMessage({ type: "mitm-lyrics-editor-ready", mode: "timeline" }, "*"); } catch (_) {}
+  }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind, { once: true }); else bind();
 })(typeof globalThis !== "undefined" ? globalThis : this, typeof LyricsTimelineState !== "undefined" ? LyricsTimelineState : null);

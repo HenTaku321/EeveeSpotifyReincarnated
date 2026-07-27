@@ -98,11 +98,11 @@ if git -C "$repo_dir" ls-files '*.ipa' | grep . >/dev/null; then
     exit 1
 fi
 
-for file in index.html app.js editor-state.js renderer.js style.css; do
+for file in index.html app.js editor-state.js renderer.js style.css icons.js repository-source.js tokens.css; do
     test -f "$bundle_dir/$file"
 done
 
-for file in index.html app.js editor-state.js style.css; do
+for file in index.html app.js editor-state.js style.css browser-host.js icons.js tokens.css; do
     test -f "$timeline_bundle_dir/$file"
 done
 
@@ -208,40 +208,49 @@ grep -Fq 'let liveTrackID = currentTrackID()' "$source_dir/LyricsTimelinePlayerB
 grep -Fq 'typedef void (*SeekFn)(id, SEL, double);' "$repo_dir/Sources/EeveeSpotifyC/Tweak.m"
 grep -Fq 'closeAttemptID' "$source_dir/LyricsTimelineEditorViewController.swift"
 grep -Fq 'fileSizeKey' "$source_dir/LyricsTimelineEditorViewController.swift"
-grep -Fq 'bestTranslationAlternative' "$timeline_bundle_dir/editor-state.js"
-grep -Fq 'ensureTranslationAlternative' "$timeline_bundle_dir/editor-state.js"
+grep -Fq 'function buildWords(base, translation, oldWords)' "$timeline_bundle_dir/editor-state.js"
 grep -Fq 'State.viewLine(editorState, index)' "$timeline_bundle_dir/app.js"
 grep -Fq 'class="lyric-field lyric-field-translation"' "$timeline_bundle_dir/index.html"
 grep -Fq '.line-copy small:empty' "$timeline_bundle_dir/style.css"
-if grep -Fq 'return `${left} (${right})`;' "$timeline_bundle_dir/editor-state.js"; then
-    echo "timeline translations must remain in alternatives instead of line.words" >&2
+grep -Fq 'return `${left}(${right})`;' "$timeline_bundle_dir/editor-state.js"
+grep -Fq 'const VERSION = 2;' "$timeline_bundle_dir/editor-state.js"
+if grep -Eq 'ensureTranslationAlternative|alternativeTranslation|bestTranslationAlternative' "$timeline_bundle_dir/editor-state.js"; then
+    echo "timeline translations must not read from or write to alternatives" >&2
+    exit 1
+fi
+grep -Fq 'State.splitTranslation(State.selectedLineText' "$bundle_dir/app.js"
+grep -Fq 'State.buildWords(base.editor.value, translation.editor.value)' "$bundle_dir/app.js"
+grep -Fq 'const PROJECT_VERSION = 2;' "$bundle_dir/editor-state.js"
+grep -Fq 'words: selectedLineText(state, line.index)' "$bundle_dir/editor-state.js"
+if grep -Fq 'edits: state.edits' "$bundle_dir/editor-state.js"; then
+    echo "share editor v2 projects must materialize edits into line.words" >&2
     exit 1
 fi
 grep -Fq 'loadDocument(payload) { editorState = State.createState(payload); history = []; future = []; render(); bridge({ command: "getPlayerState" }); return true; }' "$timeline_bundle_dir/app.js"
-grep -Fq 'class="mobile-workspace-tabs"' "$timeline_bundle_dir/index.html"
+grep -Eq 'class="([^"]*[[:space:]])?mobile-workspace-tabs([[:space:]][^"]*)?"' "$timeline_bundle_dir/index.html"
 grep -Fq 'function activateMobileView(name)' "$timeline_bundle_dir/app.js"
 grep -Fq 'class="primary-command-dock"' "$timeline_bundle_dir/index.html"
 grep -Fq '$("#dock-cue-primary").addEventListener("click", cuePrimary)' "$timeline_bundle_dir/app.js"
-grep -Fq 'grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;' "$timeline_bundle_dir/style.css"
-grep -Fq 'grid-template-columns: repeat(4, minmax(0, 1fr));' "$timeline_bundle_dir/style.css"
+grep -Fq 'grid-template-rows: auto auto auto minmax(0, 1fr) auto;' "$timeline_bundle_dir/style.css"
+grep -Fq 'grid-template-columns: repeat(3, minmax(0, 1fr));' "$timeline_bundle_dir/style.css"
 grep -Fq 'overflow-x: hidden;' "$timeline_bundle_dir/style.css"
 grep -Fq 'maximum-scale=1, user-scalable=no' "$timeline_bundle_dir/index.html"
 grep -Fq 'class="mobile-tool-dock"' "$bundle_dir/index.html"
 grep -Fq 'data-mobile-tool="export"' "$bundle_dir/index.html"
 grep -Fq 'activateMobileTool(name)' "$bundle_dir/app.js"
 grep -Fq 'grid-template-columns: repeat(6, minmax(0, 1fr));' "$bundle_dir/style.css"
-grep -Fq 'grid-template-rows: auto minmax(0, 1fr) minmax(180px, 42%);' "$bundle_dir/style.css"
+grep -Fq 'grid-template-rows: auto minmax(0, 1fr) auto minmax(180px, 42%);' "$bundle_dir/style.css"
 grep -Fq 'width: auto;' "$bundle_dir/style.css"
 grep -Fq 'height: 100%;' "$bundle_dir/style.css"
 grep -Fq 'max-block-size: 100%;' "$bundle_dir/style.css"
 grep -Fq 'maximum-scale=1, user-scalable=no' "$bundle_dir/index.html"
 grep -Fq -- '-webkit-user-select: none;' "$bundle_dir/style.css"
 grep -Fq -- '-webkit-touch-callout: none;' "$bundle_dir/style.css"
-grep -Fq 'overflow-y: auto;' "$bundle_dir/style.css"
+grep -Fq 'overflow: auto;' "$bundle_dir/style.css"
 grep -Fq 'inspector.scrollTop = 0;' "$bundle_dir/app.js"
 grep -Fq 'grid-template-columns: repeat(3, minmax(0, 1fr));' "$bundle_dir/style.css"
 grep -Fq 'env(safe-area-inset-bottom)' "$bundle_dir/style.css"
-grep -Fq 'max-width: 580px;' "$bundle_dir/style.css"
+grep -Fq 'max-width: 560px;' "$bundle_dir/style.css"
 if awk '
     /#preview-canvas[[:space:]]*\{/ { in_canvas = 1 }
     in_canvas && /(dvh|svh)/ { found = 1 }

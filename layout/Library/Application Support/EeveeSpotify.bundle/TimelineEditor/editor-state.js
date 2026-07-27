@@ -6,7 +6,7 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  const VERSION = 1;
+  const VERSION = 2;
   const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 
   function clone(value) {
@@ -29,11 +29,42 @@
     return String(Math.round(number));
   }
 
+  function findMatchingOpenIndex(text, openChar, closeChar) {
+    let depth = 0;
+    for (let index = text.length - 1; index >= 0; index -= 1) {
+      if (text[index] === closeChar) depth += 1;
+      else if (text[index] === openChar) {
+        depth -= 1;
+        if (depth === 0) return index;
+      }
+    }
+    return -1;
+  }
+
   function splitTranslation(words) {
-    const raw = asText(words);
-    const match = /^(.*?)(?:\s*\(([^()]*)\))\s*$/.exec(raw);
-    if (!match || !match[2].trim()) return { base: raw, translation: "", style: "paren" };
-    return { base: match[1], translation: match[2].trim(), style: "paren" };
+    const raw = asText(words).replace(/\s+$/, "");
+    const pair = raw.endsWith(")")
+      ? { open: "(", close: ")" }
+      : raw.endsWith("）")
+        ? { open: "（", close: "）" }
+        : null;
+    if (!pair) return { base: raw, translation: "", style: "paren" };
+    const openIndex = findMatchingOpenIndex(raw, pair.open, pair.close);
+    if (openIndex <= 0) return { base: raw, translation: "", style: "paren" };
+    const base = raw.slice(0, openIndex).replace(/\s+$/, "");
+    const translation = raw.slice(openIndex + 1, -1).trim();
+    if (!base || !translation) return { base: raw, translation: "", style: "paren" };
+    return { base, translation, style: "paren" };
+  }
+
+  function buildWords(base, translation, oldWords) {
+    const left = asText(base);
+    const right = asText(translation).trim();
+    if (!right) {
+      const oldParts = splitTranslation(oldWords);
+      return left || (oldParts.translation ? oldParts.base : asText(oldWords));
+    }
+    return `${left}(${right})`;
   }
 
   function normalizeSyllables(value) {
@@ -95,50 +126,6 @@
     };
   }
 
-  function translationScore(alternative) {
-    const language = asText(alternative && alternative.language).toLowerCase();
-    const contentType = asText(alternative && alternative.contentType).toLowerCase();
-    return (language === "zh-cn" || language === "zh-hans" || language === "zh_hans" ? 8 : language.startsWith("zh") ? 6 : 0)
-      + (contentType === "translation" || contentType === "1" ? 2 : 0);
-  }
-
-  function rankedTranslationAlternatives(lyrics, index) {
-    const alternatives = Array.isArray(lyrics && lyrics.alternatives) ? lyrics.alternatives : [];
-    return alternatives
-      .filter((alternative) => Array.isArray(alternative && alternative.lines) && alternative.lines[index] != null)
-      .sort((left, right) => translationScore(right) - translationScore(left));
-  }
-
-  function bestTranslationAlternative(lyrics, index) {
-    return rankedTranslationAlternatives(lyrics, index)[0] || null;
-  }
-
-  function ensureTranslationAlternative(lyrics, lineCount) {
-    if (!Array.isArray(lyrics.alternatives)) lyrics.alternatives = [];
-    let alternative = lyrics.alternatives
-      .filter((item) => item && typeof item === "object" && Array.isArray(item.lines))
-      .sort((left, right) => translationScore(right) - translationScore(left))[0];
-    if (!alternative) {
-      alternative = {
-        language: "zh-CN",
-        contentType: "translation",
-        isRtlLanguage: false,
-        lines: [],
-      };
-      lyrics.alternatives.push(alternative);
-    }
-    while (alternative.lines.length < lineCount) alternative.lines.push("");
-    return alternative;
-  }
-
-  function alternativeTranslation(lyrics, index) {
-    for (const candidate of rankedTranslationAlternatives(lyrics, index)) {
-      const value = asText(candidate.lines[index]).trim();
-      if (value) return value;
-    }
-    return "";
-  }
-
   function normalizeDocument(payload) {
     if (!payload || payload.ok !== true || !payload.lyrics) throw new Error("歌词服务返回了无效文档");
     const track = normalizeTrack(payload.track);
@@ -147,15 +134,8 @@
     if (!response.lyrics || typeof response.lyrics !== "object") throw new Error("歌词正文缺失");
     const lines = Array.isArray(response.lyrics.lines) ? response.lyrics.lines : [];
     if (!lines.length) throw new Error("当前曲目没有可编辑歌词");
-    response.lyrics.lines = lines.map((sourceLine, index) => {
+    response.lyrics.lines = lines.map((sourceLine) => {
       const line = normalizeLine(sourceLine);
-      const alternative = alternativeTranslation(response.lyrics, index);
-      if (alternative) {
-        if (line.translation && line.translation === alternative) line.words = line.base;
-      } else if (line.translation) {
-        ensureTranslationAlternative(response.lyrics, lines.length).lines[index] = line.translation;
-        line.words = line.base;
-      }
       delete line.base;
       delete line.translation;
       return line;
@@ -191,48 +171,33 @@
   function viewLine(state, index) {
     const line = lines(state)[index];
     if (!line) return normalizeLine(null);
-    const normalized = normalizeLine(line);
-    const alternative = alternativeTranslation(state.document.lyrics.lyrics, index);
-    if (!alternative) return normalized;
-    return {
-      ...normalized,
-      base: normalized.translation === alternative ? normalized.base : asText(line.words),
-      translation: alternative,
-    };
+    return normalizeLine(line);
   }
 
   function applyLine(state, index, patch) {
     const current = lines(state)[index];
     if (!current) return false;
-    const hasBase = Object.prototype.hasOwnProperty.call(patch || {}, "base");
-    const hasTranslation = Object.prototype.hasOwnProperty.call(patch || {}, "translation");
-    const words = hasBase ? asText(patch.base) : asText(patch.words ?? current.words);
+    const next = viewLine(state, index);
+    if (Object.prototype.hasOwnProperty.call(patch || {}, "base")) next.base = asText(patch.base);
+    if (Object.prototype.hasOwnProperty.call(patch || {}, "translation")) next.translation = asText(patch.translation);
+    const words = Object.prototype.hasOwnProperty.call(patch || {}, "base")
+      || Object.prototype.hasOwnProperty.call(patch || {}, "translation")
+      ? buildWords(next.base, next.translation, current.words)
+      : asText(patch.words ?? current.words);
     lines(state)[index] = {
-      startTimeMs: validMilliseconds(patch.startTimeMs ?? current.startTimeMs),
-      endTimeMs: validMilliseconds(patch.endTimeMs ?? current.endTimeMs),
+      startTimeMs: validMilliseconds(patch.startTimeMs ?? next.startTimeMs),
+      endTimeMs: validMilliseconds(patch.endTimeMs ?? next.endTimeMs),
       words,
       syllables: Object.prototype.hasOwnProperty.call(patch || {}, "syllables")
         ? normalizeSyllables(patch.syllables)
         : normalizeSyllables(current.syllables),
     };
-    if (hasTranslation) {
-      const translation = asText(patch.translation).trim();
-      const alternative = bestTranslationAlternative(state.document.lyrics.lyrics, index)
-        || (translation ? ensureTranslationAlternative(state.document.lyrics.lyrics, lines(state).length) : null);
-      if (alternative) alternative.lines[index] = translation;
-    }
     return true;
   }
 
   function addLine(state, index) {
     const at = Math.max(0, Math.min(lines(state).length, Number(index)));
     lines(state).splice(at, 0, { startTimeMs: "", endTimeMs: "", words: "", syllables: [] });
-    const alternatives = state.document.lyrics.lyrics.alternatives;
-    if (Array.isArray(alternatives)) {
-      alternatives.forEach((alternative) => {
-        if (Array.isArray(alternative && alternative.lines)) alternative.lines.splice(at, 0, "");
-      });
-    }
     state.selectedIndex = at;
     return at;
   }
@@ -241,12 +206,6 @@
     if (lines(state).length <= 1) return false;
     const at = Math.max(0, Math.min(lines(state).length - 1, Number(index)));
     lines(state).splice(at, 1);
-    const alternatives = state.document.lyrics.lyrics.alternatives;
-    if (Array.isArray(alternatives)) {
-      alternatives.forEach((alternative) => {
-        if (Array.isArray(alternative && alternative.lines)) alternative.lines.splice(at, 1);
-      });
-    }
     state.selectedIndex = Math.min(at, lines(state).length - 1);
     return true;
   }
@@ -349,6 +308,6 @@
     serializeState,
     restoreState,
     splitTranslation,
-    alternativeTranslation,
+    buildWords,
   });
 });

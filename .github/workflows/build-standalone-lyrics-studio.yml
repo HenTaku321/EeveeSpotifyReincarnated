@@ -95,8 +95,12 @@ jobs:
           dylib="$(find "$RUNNER_TEMP/deb-root" -type f -name 'MITMLyricsStudio.dylib' -print -quit)"
           bundle="$(find "$RUNNER_TEMP/deb-root" -type d -name 'MITMLyricsStudio.bundle' -print -quit)"
           test -n "$dylib"
-          test -f "$bundle/ShareEditor/index.html"
-          test -f "$bundle/TimelineEditor/index.html"
+          for file in index.html app.js editor-state.js renderer.js style.css icons.js repository-source.js tokens.css; do
+            test -f "$bundle/ShareEditor/$file"
+          done
+          for file in index.html app.js editor-state.js style.css browser-host.js icons.js tokens.css; do
+            test -f "$bundle/TimelineEditor/$file"
+          done
           test -x "$ORION_FRAMEWORK/Orion"
           cp "$dylib" "$RUNNER_TEMP/trollfools-root/MITMLyricsStudio.dylib"
           cp -R "$bundle" "$RUNNER_TEMP/trollfools-root/MITMLyricsStudio.bundle"
@@ -115,7 +119,13 @@ jobs:
           required = {
               "MITMLyricsStudio.dylib",
               "MITMLyricsStudio.bundle/ShareEditor/index.html",
+              "MITMLyricsStudio.bundle/ShareEditor/icons.js",
+              "MITMLyricsStudio.bundle/ShareEditor/repository-source.js",
+              "MITMLyricsStudio.bundle/ShareEditor/tokens.css",
               "MITMLyricsStudio.bundle/TimelineEditor/index.html",
+              "MITMLyricsStudio.bundle/TimelineEditor/browser-host.js",
+              "MITMLyricsStudio.bundle/TimelineEditor/icons.js",
+              "MITMLyricsStudio.bundle/TimelineEditor/tokens.css",
               "Orion.framework/Orion",
           }
           with zipfile.ZipFile(archive) as package:

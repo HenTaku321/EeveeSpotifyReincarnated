@@ -133,10 +133,12 @@ jobs:
           test -n "$DYLIB"
           test -x "$FRAMEWORK"
           test -x "$ORION_FRAMEWORK/Orion"
-          test -f "$BUNDLE/ShareEditor/index.html"
-          test -f "$BUNDLE/ShareEditor/app.js"
-          test -f "$BUNDLE/TimelineEditor/index.html"
-          test -f "$BUNDLE/TimelineEditor/app.js"
+          for file in index.html app.js editor-state.js renderer.js style.css icons.js repository-source.js tokens.css; do
+            test -f "$BUNDLE/ShareEditor/$file"
+          done
+          for file in index.html app.js editor-state.js style.css browser-host.js icons.js tokens.css; do
+            test -f "$BUNDLE/TimelineEditor/$file"
+          done
 
           TROLLFOOLS_ROOT="$RUNNER_TEMP/trollfools-root"
           cp -f "$DYLIB" "$TROLLFOOLS_ROOT/EeveeSpotify.dylib"
@@ -165,8 +167,14 @@ jobs:
               "Orion.framework/Orion",
               "EeveeSpotify.bundle/ShareEditor/index.html",
               "EeveeSpotify.bundle/ShareEditor/app.js",
+              "EeveeSpotify.bundle/ShareEditor/icons.js",
+              "EeveeSpotify.bundle/ShareEditor/repository-source.js",
+              "EeveeSpotify.bundle/ShareEditor/tokens.css",
               "EeveeSpotify.bundle/TimelineEditor/index.html",
               "EeveeSpotify.bundle/TimelineEditor/app.js",
+              "EeveeSpotify.bundle/TimelineEditor/browser-host.js",
+              "EeveeSpotify.bundle/TimelineEditor/icons.js",
+              "EeveeSpotify.bundle/TimelineEditor/tokens.css",
           }
           with zipfile.ZipFile(archive) as package:
               names = {item.filename for item in package.infolist() if not item.is_dir()}
@@ -280,7 +288,12 @@ jobs:
           BUNDLE="$RUNNER_TEMP/deb-root/var/jb/Library/Application Support/EeveeSpotify.bundle"
           test -n "$DYLIB"
           test -f "$FRAMEWORK/EeveeSwiftProtobuf"
-          test -f "$BUNDLE/ShareEditor/index.html"
+          for file in index.html app.js editor-state.js renderer.js style.css icons.js repository-source.js tokens.css; do
+            test -f "$BUNDLE/ShareEditor/$file"
+          done
+          for file in index.html app.js editor-state.js style.css browser-host.js icons.js tokens.css; do
+            test -f "$BUNDLE/TimelineEditor/$file"
+          done
           SPOTIFY_VERSION="$(unzip -p "$IPA" 'Payload/Spotify.app/Info.plist' | plutil -extract CFBundleShortVersionString raw 2>/dev/null || printf unknown)"
           SAFE_VERSION="$(printf '%s' "$SPOTIFY_VERSION" | LC_ALL=C tr -c 'A-Za-z0-9._-' '_')"
           SAFE_VERSION="$(printf '%.64s' "$SAFE_VERSION")"
@@ -291,7 +304,13 @@ jobs:
           unzip -Z1 "$OUT" | grep -E '/EeveeSpotify\.dylib$' >/dev/null
           unzip -Z1 "$OUT" | grep -E '/EeveeSwiftProtobuf\.framework/EeveeSwiftProtobuf$' >/dev/null
           unzip -Z1 "$OUT" | grep -E '/EeveeSpotify\.bundle/ShareEditor/index\.html$' >/dev/null
+          unzip -Z1 "$OUT" | grep -E '/EeveeSpotify\.bundle/ShareEditor/icons\.js$' >/dev/null
+          unzip -Z1 "$OUT" | grep -E '/EeveeSpotify\.bundle/ShareEditor/repository-source\.js$' >/dev/null
+          unzip -Z1 "$OUT" | grep -E '/EeveeSpotify\.bundle/ShareEditor/tokens\.css$' >/dev/null
           unzip -Z1 "$OUT" | grep -E '/EeveeSpotify\.bundle/TimelineEditor/index\.html$' >/dev/null
+          unzip -Z1 "$OUT" | grep -E '/EeveeSpotify\.bundle/TimelineEditor/browser-host\.js$' >/dev/null
+          unzip -Z1 "$OUT" | grep -E '/EeveeSpotify\.bundle/TimelineEditor/icons\.js$' >/dev/null
+          unzip -Z1 "$OUT" | grep -E '/EeveeSpotify\.bundle/TimelineEditor/tokens\.css$' >/dev/null
 
       - name: Upload optional IPA artifact
         uses: actions/upload-artifact@v4

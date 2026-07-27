@@ -3,85 +3,100 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <title>歌词编辑器</title>
+  <title>歌词内容与时间轴</title>
   <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./tokens.css">
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <main class="timeline-app" id="timeline-app">
     <header class="topbar">
-      <div class="identity">
-        <span class="mark" aria-hidden="true">♪</span>
-        <div><h1>歌词编辑器</h1><p id="track-subtitle">等待当前曲目</p></div>
+      <div class="topbar-titles">
+        <h1>歌词与时间轴</h1>
+        <p id="track-subtitle">等待当前曲目</p>
       </div>
-      <div class="top-actions">
-        <button id="undo-button" type="button" title="撤销">↶</button>
-        <button id="redo-button" type="button" title="重做">↷</button>
-        <button class="primary" id="save-button" type="button">保存</button>
+      <div class="topbar-actions">
+        <button class="icon-button" id="undo-button" type="button" aria-label="撤销" title="撤销"><span class="icon-slot" data-icon="undo"></span></button>
+        <button class="icon-button" id="redo-button" type="button" aria-label="重做" title="重做"><span class="icon-slot" data-icon="redo"></span></button>
+        <button class="accent-button" id="save-button" type="button"><span class="icon-slot icon-sm" data-icon="save"></span><span>保存</span></button>
       </div>
     </header>
 
-    <section class="transport" aria-label="播放控制">
-      <div class="transport-main">
-        <button class="round-control" id="play-button" type="button" aria-label="播放或暂停">▶</button>
+    <section class="control-deck" aria-label="播放与同步控制">
+      <div class="transport-card">
+        <button class="transport-play" id="play-button" type="button" aria-label="播放或暂停">
+          <span class="icon-slot" data-icon="play"></span>
+          <span class="icon-slot" data-icon="pause"></span>
+        </button>
         <div class="position-readout"><strong id="position-label">0:00.000</strong><span>/ <span id="duration-label">0:00.000</span></span></div>
         <input id="position-slider" type="range" min="0" max="0" value="0" step="1" aria-label="播放位置">
       </div>
-      <div class="cue-controls">
-        <button id="cue-toggle" type="button">打点：关</button>
-        <button id="cue-word-toggle" type="button">逐词：关</button>
-        <button id="cue-start" type="button">写入 start</button>
-        <button id="cue-end" type="button">写入 end</button>
-        <button id="preview-line" type="button">播放当前行</button>
+      <div class="cue-row">
+        <button class="cue-pill" id="cue-toggle" type="button" aria-pressed="false"><span class="pill-dot" aria-hidden="true"></span><span class="pill-text">打点</span></button>
+        <button class="cue-pill" id="cue-word-toggle" type="button" aria-pressed="false"><span class="pill-dot" aria-hidden="true"></span><span class="pill-text">逐词</span></button>
+        <button class="cue-button" id="cue-start" type="button" title="快捷键 W（打点开启时）">写入 start</button>
+        <button class="cue-button" id="cue-end" type="button" title="快捷键 E（打点开启时）">写入 end</button>
+        <button class="ghost-button" id="play-line" type="button" title="快捷键 Q">播放当前行</button>
+      </div>
+      <div class="mode-row">
+        <div class="segmented" role="group" aria-label="同步模式">
+          <button type="button" data-mode="UNSYNCED">无同步</button>
+          <button type="button" data-mode="LINE_SYNCED">逐行</button>
+          <button type="button" data-mode="SYLLABLE_SYNCED">逐词</button>
+          <button type="button" data-mode="AUTO">自动</button>
+        </div>
+        <output id="status" aria-live="polite"></output>
       </div>
     </section>
 
-    <section class="modebar" aria-label="同步模式">
-      <span class="mode-label">同步模式</span>
-      <div class="modes" role="group">
-        <button type="button" data-mode="UNSYNCED"><span class="mode-long">UNSYNCED</span><span class="mode-short">无同步</span></button>
-        <button type="button" data-mode="LINE_SYNCED"><span class="mode-long">LINE_SYNCED</span><span class="mode-short">逐行</span></button>
-        <button type="button" data-mode="SYLLABLE_SYNCED"><span class="mode-long">SYLLABLE_SYNCED</span><span class="mode-short">逐词</span></button>
-        <button type="button" data-mode="AUTO"><span class="mode-long">AUTO</span><span class="mode-short">自动</span></button>
-      </div>
-      <output id="status" aria-live="polite"></output>
-    </section>
-
-    <nav class="mobile-workspace-tabs" role="tablist" aria-label="歌词编辑工作区">
+    <nav class="mobile-workspace-tabs segmented" role="tablist" aria-label="歌词编辑工作区">
       <button class="is-active" type="button" role="tab" aria-selected="true" aria-controls="current-panel" data-mobile-view="current">当前行</button>
       <button type="button" role="tab" aria-selected="false" aria-controls="lines-panel" data-mobile-view="lines">整首歌词</button>
     </nav>
 
     <section class="workspace" data-mobile-view="current">
       <div class="current-panel" id="current-panel">
-        <div class="panel-heading"><div><span class="eyebrow">CURRENT LINE</span><h2 id="current-index">第 1 行</h2></div><button id="next-line" type="button">下一行 →</button></div>
-        <label class="lyric-field lyric-field-original"><span>原文</span><textarea id="current-base" rows="3" dir="auto"></textarea></label>
-        <label class="lyric-field lyric-field-translation"><span>译文</span><textarea id="current-translation" rows="2" dir="auto"></textarea></label>
-        <div class="time-grid"><label>start (ms)<input id="current-start" inputmode="numeric"></label><label>end (ms)<input id="current-end" inputmode="numeric"></label></div>
-        <label class="syllables-label">逐词时间 <textarea id="current-syllables" rows="3" placeholder="例如：1200:第一词\n1650:第二词"></textarea></label>
-        <div class="current-actions"><button id="add-before" type="button">前面加行</button><button id="add-after" type="button">后面加行</button><button class="danger" id="delete-current" type="button">删除当前行</button></div>
+        <div class="panel-heading">
+          <h2>当前行 · <span id="current-index">第 1 行</span></h2>
+          <button class="ghost-button" id="next-line" type="button" title="快捷键 ↓ / 上一行 ↑"><span>下一行</span><span class="icon-slot icon-sm" data-icon="chevronRight"></span></button>
+        </div>
+        <label class="lyric-field"><span class="field-label">原文</span><textarea id="current-base" rows="2" dir="auto"></textarea></label>
+        <label class="lyric-field lyric-field-translation"><span class="field-label">译文</span><textarea id="current-translation" rows="1" dir="auto"></textarea></label>
+        <div class="time-grid">
+          <label class="time-field"><span class="field-label"><span class="icon-slot icon-sm" data-icon="clock"></span>start (ms)</span><input id="current-start" inputmode="numeric"></label>
+          <label class="time-field"><span class="field-label"><span class="icon-slot icon-sm" data-icon="clock"></span>end (ms)</span><input id="current-end" inputmode="numeric"></label>
+        </div>
+        <label class="syllables-field"><span class="field-label">逐词时间</span><textarea id="current-syllables" rows="3" placeholder="例如：1200:第一词&#10;1650:第二词"></textarea></label>
+        <div class="current-actions">
+          <button id="add-before" type="button"><span class="icon-slot icon-sm" data-icon="insertAbove"></span><span>前插</span></button>
+          <button id="add-after" type="button"><span class="icon-slot icon-sm" data-icon="insertBelow"></span><span>后插</span></button>
+          <button class="danger-button" id="delete-current" type="button"><span class="icon-slot icon-sm" data-icon="trash"></span><span>删除当前行</span></button>
+        </div>
       </div>
       <div class="lines-panel" id="lines-panel">
-        <div class="panel-heading"><div><span class="eyebrow">LYRICS</span><h2>整首歌词</h2></div><span class="count" id="line-count">0 行</span></div>
+        <div class="panel-heading">
+          <h2>整首歌词 · <span id="line-count">0 行</span></h2>
+        </div>
         <div class="lines-list" id="lines-list"></div>
       </div>
     </section>
 
     <nav class="primary-command-dock" aria-label="当前行快捷操作">
-      <div class="command-primary">
-        <button class="primary" id="dock-cue-primary" type="button">写入 start</button>
+      <div class="dock-row">
+        <button class="cue-button" id="dock-cue-primary" type="button">写入 start</button>
         <button id="dock-cue-end" type="button">写入 end</button>
-        <button id="dock-next-line" type="button">下一行</button>
+        <button id="dock-next-line" type="button"><span>下一行</span><span class="icon-slot icon-sm" data-icon="chevronRight"></span></button>
       </div>
-      <div class="command-secondary">
-        <button id="dock-add-before" type="button" title="在当前行前插入">前插</button>
-        <button id="dock-add-after" type="button" title="在当前行后插入">后插</button>
-        <button class="danger" id="dock-delete-current" type="button">删除</button>
-        <button class="primary" id="dock-save" type="button">保存</button>
+      <div class="dock-row">
+        <button id="dock-add-before" type="button"><span class="icon-slot icon-sm" data-icon="insertAbove"></span><span>前插</span></button>
+        <button id="dock-add-after" type="button"><span class="icon-slot icon-sm" data-icon="insertBelow"></span><span>后插</span></button>
+        <button class="danger-button" id="dock-delete-current" type="button"><span class="icon-slot icon-sm" data-icon="trash"></span><span>删除</span></button>
       </div>
     </nav>
   </main>
+  <script src="./icons.js"></script>
   <script src="./editor-state.js"></script>
+  <script src="./browser-host.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
