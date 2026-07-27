@@ -898,6 +898,7 @@
         startY: event.clientY,
         startSize,
       };
+      this.elements.inspectorResizeHandle.focus({ preventScroll: true });
       this.elements.inspectorResizeHandle.setPointerCapture(event.pointerId);
       this.elements.inspectorResizeHandle.classList.add("is-resizing");
       event.preventDefault();

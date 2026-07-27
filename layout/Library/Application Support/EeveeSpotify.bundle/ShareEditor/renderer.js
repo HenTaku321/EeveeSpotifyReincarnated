@@ -667,19 +667,22 @@
       }, M.footerTrackCoverRadius);
     }
 
-    // The trailing source label is measured first so the track text can be
-    // truncated before it ever reaches the label.
+    // A configured server logo replaces the provider label. Without one, the
+    // trailing source label is measured first so track text cannot reach it.
     ctx.fillStyle = state.style.textColor;
     ctx.textBaseline = "alphabetic";
     ctx.font = fontSpec("classic", M.footerHairlineTextSize, 600);
-    const sourceWidth = ctx.measureText(source).width;
-    ctx.globalAlpha = M.footerHairlineTextAlpha;
-    ctx.textAlign = rtl ? "left" : "right";
-    ctx.fillText(source, rtl ? M.margin + sourceLogoInset : M.logicalSize - M.margin, M.footerBaseline);
-    ctx.globalAlpha = 1;
+    const sourceWidth = sourceLogoInset ? 0 : ctx.measureText(source).width;
+    if (!sourceLogoInset) {
+      ctx.globalAlpha = M.footerHairlineTextAlpha;
+      ctx.textAlign = rtl ? "left" : "right";
+      ctx.fillText(source, rtl ? M.margin : M.logicalSize - M.margin, M.footerBaseline);
+      ctx.globalAlpha = 1;
+    }
 
     const chipInset = cover ? M.footerTrackCoverSize + M.footerTrackTextGap : 0;
-    let remaining = M.logicalSize - M.margin * 2 - sourceLogoInset - chipInset - sourceWidth - M.footerTrackSourceGap;
+    const sourceReserve = sourceLogoInset ? 0 : sourceWidth + M.footerTrackSourceGap;
+    let remaining = M.logicalSize - M.margin * 2 - sourceLogoInset - chipInset - sourceReserve;
     if (remaining <= 0) return;
     let cursor = rtl
       ? M.logicalSize - M.margin - chipInset
@@ -737,7 +740,7 @@
       ctx.textAlign = "left";
       ctx.font = fontSpec("classic", M.footerHairlineTextSize, 600);
       const sourceLogoInset = drawSourceLogo(ctx, resources, M);
-      ctx.fillText(source, M.margin + sourceLogoInset, M.footerBaseline);
+      if (!sourceLogoInset) ctx.fillText(source, M.margin, M.footerBaseline);
       ctx.globalAlpha = 1;
       ctx.restore();
       return;
@@ -746,8 +749,8 @@
     ctx.textBaseline = "alphabetic";
     ctx.textAlign = "left";
     ctx.font = fontSpec("classic", M.footerMarkSize, 800);
-    let sourceInset = drawSourceLogo(ctx, resources, M);
-    if (!sourceInset) {
+    const sourceLogoInset = drawSourceLogo(ctx, resources, M);
+    if (!sourceLogoInset) {
       ctx.beginPath();
       ctx.arc(M.margin + M.footerMarkOffsetX, M.footerBaseline + M.footerMarkOffsetY, M.footerMarkRadius, 0, Math.PI * 2);
       ctx.fill();
@@ -756,10 +759,9 @@
       ctx.arc(M.margin + M.footerMarkInnerOffsetX, M.footerBaseline + M.footerMarkInnerOffsetY, M.footerMarkInnerRadius, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalCompositeOperation = "source-over";
-      sourceInset = M.footerTextOffsetX;
+      ctx.font = fontSpec("classic", M.footerSize, 800);
+      ctx.fillText(source, M.margin + M.footerTextOffsetX, M.footerBaseline);
     }
-    ctx.font = fontSpec("classic", M.footerSize, 800);
-    ctx.fillText(source, M.margin + sourceInset, M.footerBaseline);
     ctx.restore();
   }
 

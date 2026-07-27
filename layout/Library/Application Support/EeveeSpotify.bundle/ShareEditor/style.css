@@ -1176,6 +1176,7 @@ dialog::backdrop { background: var(--bg); opacity: 0.72; }
 
   .app-title p { display: none; }
   .preview-heading { display: none; }
+  .inspector-resize-handle { display: none !important; }
   .editor-grid { grid-template-rows: 0 minmax(0, 1fr) 44px 88px !important; }
   .mobile-tool-dock button { min-height: 44px; }
   .canvas-stage { padding-top: var(--s-1); padding-bottom: var(--s-1); }
