@@ -5,6 +5,18 @@
  */
 
 @font-face {
+  font-family: "MITM Editor Sans";
+  src: url("./fonts/inter-latin-wght-normal.woff2") format("woff2-variations");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: block;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC,
+    U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
   font-family: "MITM Poster Rounded";
   src: url("./fonts/plus-jakarta-sans-latin-wght-normal.woff2") format("woff2-variations");
   font-style: normal;
@@ -611,6 +623,7 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: var(--r-sm
 
 .font-sample { font-size: var(--fs-xl); font-weight: var(--fw-bold); line-height: var(--lh-tight); }
 .font-name { font-size: var(--fs-sm); }
+.font-classic .font-sample { font-family: "MITM Editor Sans", var(--font-sans); }
 .font-wide .font-sample { font-family: "Arial Black", var(--font-sans); }
 .font-narrow .font-sample { font-family: "Arial Narrow", var(--font-sans); font-stretch: condensed; }
 .font-slanted .font-sample { font-family: Georgia, serif; font-style: italic; }

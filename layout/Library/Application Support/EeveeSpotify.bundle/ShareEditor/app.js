@@ -93,22 +93,46 @@
     return SOURCE_LOGO_URLS[variant] || SOURCE_LOGO_URLS.original;
   }
 
-  async function loadPosterFont(fontSet) {
+  const BUNDLED_FONT_PROBES = Object.freeze({
+    classic: Object.freeze({
+      family: "MITM Editor Sans",
+      probes: Object.freeze([
+        Object.freeze(['800 24px "MITM Editor Sans"', "the time 0123"]),
+        Object.freeze(['600 12px "MITM Editor Sans"', "Translation 0123"]),
+        Object.freeze(['500 11px "MITM Editor Sans"', "Track artist 0123"]),
+      ]),
+    }),
+    rounded: Object.freeze({
+      family: "MITM Poster Rounded",
+      probes: Object.freeze([
+        Object.freeze(['800 24px "MITM Poster Rounded"', "Spotify poster 0123"]),
+        Object.freeze(['600 12px "MITM Poster Rounded"', "Translation 0123"]),
+        Object.freeze(['500 11px "MITM Poster Rounded"', "Track artist 0123"]),
+      ]),
+    }),
+  });
+
+  async function loadBundledFont(fontSet, definition) {
     if (!fontSet || typeof fontSet.load !== "function") return "fallback";
     try {
-      await Promise.all([
-        fontSet.load('800 24px "MITM Poster Rounded"', "Spotify poster 0123"),
-        fontSet.load('600 12px "MITM Poster Rounded"', "Translation 0123"),
-        fontSet.load('500 11px "MITM Poster Rounded"', "Track artist 0123"),
-      ]);
+      await Promise.all(definition.probes.map(([spec, sample]) => fontSet.load(spec, sample)));
       if (fontSet.ready && typeof fontSet.ready.then === "function") await fontSet.ready;
       if (typeof fontSet.check !== "function") return "custom";
-      return fontSet.check('800 24px "MITM Poster Rounded"', "Spotify poster 0123")
+      const [spec, sample] = definition.probes[0];
+      return fontSet.check(spec, sample)
         ? "custom"
         : "fallback";
     } catch (_error) {
       return "fallback";
     }
+  }
+
+  async function loadEditorFonts(fontSet) {
+    const entries = await Promise.all(Object.entries(BUNDLED_FONT_PROBES).map(async ([key, definition]) => [
+      key,
+      await loadBundledFont(fontSet, definition),
+    ]));
+    return Object.freeze(Object.fromEntries(entries));
   }
 
   function createDocumentGateway(options) {
@@ -467,7 +491,7 @@
     constructor(documentInput) {
       this.elements = this.collectElements();
       this.imageCache = new ImageCache();
-      this.posterFontReadiness = loadPosterFont(root.document && root.document.fonts);
+      this.editorFontReadiness = loadEditorFonts(root.document && root.document.fonts);
       this.history = State.createHistory(State.createEditorState(documentInput));
       this.resources = { background: null, cover: null, sourceLogo: null, stickers: new Map() };
       this.renderGeneration = 0;
@@ -863,9 +887,9 @@
     async scheduleCanvasRender(state) {
       const generation = ++this.renderGeneration;
       const effective = effectiveMediaState(state);
-      const [resolvedResources, posterFontMode] = await Promise.all([this.imageCache.resolve(effective), this.posterFontReadiness]);
+      const [resolvedResources, fontModes] = await Promise.all([this.imageCache.resolve(effective), this.editorFontReadiness]);
       if (generation !== this.renderGeneration) return;
-      const resources = { ...resolvedResources, posterFontMode };
+      const resources = { ...resolvedResources, fontModes };
       this.resources = resources;
       this.previewRenderScale = Math.max(
         this.previewRenderScale,
@@ -1428,8 +1452,8 @@
     async renderExport() {
       const state = effectiveMediaState(this.history.state);
       const exportSpec = resolveExportSpec(this.elements.exportResolution.value);
-      const [resolvedResources, posterFontMode] = await Promise.all([this.imageCache.resolve(state), this.posterFontReadiness]);
-      let resources = { ...resolvedResources, posterFontMode };
+      const [resolvedResources, fontModes] = await Promise.all([this.imageCache.resolve(state), this.editorFontReadiness]);
+      let resources = { ...resolvedResources, fontModes };
       Renderer.renderToCanvas(this.elements.exportCanvas, state, resources, { showSelection: false, scale: exportSpec.scale });
       try {
         this.elements.exportCanvas.getContext("2d").getImageData(0, 0, 1, 1);
@@ -1536,7 +1560,7 @@
     replaceChildrenPreservingScroll,
     resolveExportSpec,
     sourceLogoURL,
-    loadPosterFont,
+    loadEditorFonts,
     safeImageSource,
     sanitizeFilename,
     publicApi,

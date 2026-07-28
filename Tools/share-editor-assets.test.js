@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const ShareState = require("../layout/Library/Application Support/EeveeSpotify.bundle/ShareEditor/editor-state.js");
 const TimelineState = require("../layout/Library/Application Support/EeveeSpotify.bundle/TimelineEditor/editor-state.js");
+const SHARE_BUNDLE = path.join(__dirname, "../layout/Library/Application Support/EeveeSpotify.bundle/ShareEditor");
 
 const TINY_PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
 const HASH = "0123456789abcdef".repeat(4);
@@ -13,6 +14,27 @@ const HASH = "0123456789abcdef".repeat(4);
 function readSource(name) {
   return fs.readFileSync(path.join(__dirname, "../Sources/EeveeSpotify/ShareEditor", name), "utf8");
 }
+
+test("standalone ships distinct licensed variable faces for classic and rounded Canvas text", () => {
+  const style = fs.readFileSync(path.join(SHARE_BUNDLE, "style.css"), "utf8");
+  const renderer = fs.readFileSync(path.join(SHARE_BUNDLE, "renderer.js"), "utf8");
+  const app = fs.readFileSync(path.join(SHARE_BUNDLE, "app.js"), "utf8");
+  assert.match(style, /font-family:\s*"MITM Editor Sans"/);
+  assert.match(style, /inter-latin-wght-normal\.woff2/);
+  assert.match(style, /plus-jakarta-sans-latin-wght-normal\.woff2/);
+  assert.match(renderer, /classic:\s*'"MITM Editor Sans"/);
+  assert.match(renderer, /rounded:\s*'"MITM Poster Rounded"/);
+  assert.doesNotMatch(renderer, /classic:\s*'Arial\b/);
+  assert.match(app, /function loadEditorFonts\(fontSet\)/);
+  for (const name of [
+    "fonts/inter-latin-wght-normal.woff2",
+    "fonts/OFL-Inter.txt",
+    "fonts/plus-jakarta-sans-latin-wght-normal.woff2",
+    "fonts/OFL-Plus-Jakarta-Sans.txt",
+  ]) {
+    assert.equal(fs.existsSync(path.join(SHARE_BUNDLE, name)), true, `${name} must ship in the standalone bundle`);
+  }
+});
 
 test("native bridge keeps lyrics documents at 8 MiB while allowing 32 MiB PNG exports", () => {
   const bridge = readSource("LyricsShareEditorBridge.swift");
