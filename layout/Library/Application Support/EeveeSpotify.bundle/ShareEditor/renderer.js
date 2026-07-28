@@ -39,6 +39,8 @@
     compactArtistBaselineOffset: 23,
     lyricsTop: 84,
     lyricsBottom: 242,
+    lyricsInset: 24,
+    lyricsVerticalAlign: "top",
     lyricMaxSize: 26,
     lyricMinSize: 13,
     lyricLineHeight: 1.08,
@@ -67,9 +69,13 @@
     footerTrackTitleSize: 7,
     footerTrackTextAlpha: 0.7,
     footerTrackSourceGap: 8,
-    footerSourceLogoSize: 10,
+    footerSourceLogoSize: 20,
+    footerSourceLogoMaxWidth: 76,
     footerSourceLogoGap: 4,
+    footerSourceLogoTop: null,
     backgroundTintAlpha: 0.42,
+    backgroundScrim: "adaptiveGradient",
+    headerUsesBodyFont: false,
     stickerHandleRadius: 4.5,
   });
 
@@ -85,16 +91,31 @@
       lyricMaxSize: 64,
     }),
     poster: Object.freeze({
-      header: "compact",
-      footer: "hairline",
+      header: "default",
+      headerGap: 12,
+      headerUsesBodyFont: true,
+      footer: "brandOnly",
       backgroundMode: "coverBleed",
-      lyricsTop: 96,
-      lyricsBottom: 252,
+      backgroundScrim: "uniform",
+      backgroundTintAlpha: 0.6,
+      lyricsInset: 30,
+      lyricsTop: 87,
+      lyricsBottom: 224,
+      lyricsVerticalAlign: "center",
+      lyricMaxSize: 24,
+      lyricMinSize: 13,
+      lyricLineHeight: 1.19,
+      lyricGroupGap: 0,
+      footerBaseline: 271,
+      footerSourceLogoSize: 20,
+      footerSourceLogoMaxWidth: 76,
+      footerSourceLogoGap: 0,
+      footerSourceLogoTop: 252,
     }),
   });
 
   function resolveTemplate(name) {
-    return Object.freeze({ ...LAYOUT, ...(TEMPLATES[name] || TEMPLATES.lyrics) });
+    return Object.freeze({ ...LAYOUT, ...(TEMPLATES[name] || TEMPLATES.skeleton) });
   }
 
   const FONT_FAMILIES = Object.freeze({
@@ -102,6 +123,8 @@
     wide: 'Arial Black, Helvetica, sans-serif',
     narrow: 'Arial Narrow, Helvetica Condensed, sans-serif',
     slanted: 'Georgia, Times New Roman, serif',
+    rounded: '"MITM Poster Rounded", ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Avenir Next", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans", "Hiragino Sans GB", "Apple SD Gothic Neo", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif',
+    roundedFallback: 'ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Avenir Next", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans", "Hiragino Sans GB", "Apple SD Gothic Neo", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif',
   });
 
   function clamp(value, min, max) {
@@ -154,8 +177,10 @@
     return isRtl ? "right" : "left";
   }
 
-  function fontSpec(fontType, size, weight) {
-    const family = FONT_FAMILIES[fontType] || FONT_FAMILIES.classic;
+  function fontSpec(fontType, size, weight, posterFontMode) {
+    const family = fontType === "rounded" && posterFontMode === "fallback"
+      ? FONT_FAMILIES.roundedFallback
+      : FONT_FAMILIES[fontType] || FONT_FAMILIES.classic;
     const style = fontType === "slanted" ? "italic " : "";
     return `${style}${weight || 800} ${size}px ${family}`;
   }
@@ -285,10 +310,11 @@
     return visible;
   }
 
-  function createLyricsLayout(ctx, state, metrics) {
+  function createLyricsLayout(ctx, state, metrics, resources) {
     const M = metrics || resolveTemplate(state.template);
-    const width = M.logicalSize - M.margin * 2;
+    const width = M.logicalSize - M.lyricsInset * 2;
     const availableHeight = M.lyricsBottom - M.lyricsTop;
+    const posterFontMode = resources && resources.posterFontMode;
     const language = state.document.lyrics.language;
     const selected = State.getSelectedLines(state).map((line) => ({
       index: line.index,
@@ -301,9 +327,9 @@
       const translationFontSize = Math.max(6, fontSize * M.translationScale);
       const lineHeight = fontSize * M.lyricLineHeight;
       const translationLineHeight = translationFontSize * M.translationLineHeight;
-      ctx.font = fontSpec(state.style.fontType, fontSize, 800);
+      ctx.font = fontSpec(state.style.fontType, fontSize, 800, posterFontMode);
       const groups = selected.map((line) => ({ ...line, rows: wrapText(ctx, line.base, width) }));
-      ctx.font = fontSpec(state.style.fontType, translationFontSize, 600);
+      ctx.font = fontSpec(state.style.fontType, translationFontSize, 600, posterFontMode);
       groups.forEach((group) => {
         group.translationRows = group.translation ? wrapText(ctx, group.translation, width) : [];
       });
@@ -340,22 +366,48 @@
 
     // Even the minimum size overflows: allocate row quotas and truncate.
     const { fontSize, lineHeight, translationFontSize, translationLineHeight, groups } = smallest;
-    const gapHeight = Math.max(0, groups.length - 1) * M.lyricGroupGap;
-    const allocations = groups.map((group) => ({ base: 1, translation: group.translationRows.length ? 1 : 0 }));
-    const minimumHeight = allocations.reduce((total, allocation) => total
-      + allocation.base * lineHeight
-      + (allocation.translation ? M.translationGap + allocation.translation * translationLineHeight : 0), gapHeight);
-    let remainingHeight = Math.max(0, availableHeight - minimumHeight);
-    while (remainingHeight > 0) {
+    const allocations = groups.map(() => ({ base: 0, translation: 0 }));
+    let remainingHeight = availableHeight;
+    let visibleGroups = 0;
+    // Preserve one readable base row per selected group before spending the
+    // constrained poster budget on translations or additional wrapped rows.
+    for (let index = 0; index < groups.length; index += 1) {
+      const cost = lineHeight + (visibleGroups ? M.lyricGroupGap : 0);
+      if (remainingHeight + 0.001 < cost) break;
+      allocations[index].base = 1;
+      remainingHeight -= cost;
+      visibleGroups += 1;
+    }
+    // Preserve wrapped base lyrics before translations. This avoids turning
+    // every selected long lyric into a one-row ellipsis merely to show more
+    // secondary rows.
+    while (remainingHeight + 0.001 >= lineHeight) {
       let allocated = false;
       for (let index = 0; index < groups.length; index += 1) {
-        if (allocations[index].base < groups[index].rows.length && remainingHeight >= lineHeight) {
+        if (!allocations[index].base) continue;
+        if (allocations[index].base < groups[index].rows.length && remainingHeight + 0.001 >= lineHeight) {
           allocations[index].base += 1;
           remainingHeight -= lineHeight;
           allocated = true;
         }
-        if (allocations[index].translation < groups[index].translationRows.length
-          && remainingHeight >= translationLineHeight) {
+      }
+      if (!allocated) break;
+    }
+    // A translation's first row also owns translationGap. Once all visible
+    // base rows are allocated, translations consume only the remaining space.
+    for (let index = 0; index < groups.length; index += 1) {
+      if (!allocations[index].base || !groups[index].translationRows.length) continue;
+      const cost = M.translationGap + translationLineHeight;
+      if (remainingHeight + 0.001 < cost) continue;
+      allocations[index].translation = 1;
+      remainingHeight -= cost;
+    }
+    while (remainingHeight + 0.001 >= translationLineHeight) {
+      let allocated = false;
+      for (let index = 0; index < groups.length; index += 1) {
+        if (allocations[index].translation > 0
+          && allocations[index].translation < groups[index].translationRows.length
+          && remainingHeight + 0.001 >= translationLineHeight) {
           allocations[index].translation += 1;
           remainingHeight -= translationLineHeight;
           allocated = true;
@@ -364,12 +416,13 @@
       if (!allocated) break;
     }
     const fittedGroups = groups.map((group, index) => {
-      ctx.font = fontSpec(state.style.fontType, fontSize, 800);
+      ctx.font = fontSpec(state.style.fontType, fontSize, 800, posterFontMode);
       const rows = limitWrappedRows(ctx, group.rows, allocations[index].base, width);
-      ctx.font = fontSpec(state.style.fontType, translationFontSize, 600);
+      ctx.font = fontSpec(state.style.fontType, translationFontSize, 600, posterFontMode);
       const translationRows = limitWrappedRows(ctx, group.translationRows, allocations[index].translation, width);
       return { ...group, rows, translationRows };
-    });
+    }).filter((group) => group.rows.length || group.translationRows.length);
+    const gapHeight = Math.max(0, fittedGroups.length - 1) * M.lyricGroupGap;
     const fittedHeight = fittedGroups.reduce((total, group) => total
       + group.rows.length * lineHeight
       + (group.translationRows.length
@@ -502,6 +555,11 @@
       if (!bleed) return;
       const crop = fitCover(bleed.naturalWidth || bleed.width, bleed.naturalHeight || bleed.height, size, size);
       ctx.drawImage(bleed, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, size, size);
+      if (M.backgroundScrim === "uniform") {
+        ctx.fillStyle = `rgba(0,0,0,${M.backgroundTintAlpha})`;
+        ctx.fillRect(0, 0, size, size);
+        return;
+      }
       // Vertical scrim, darker at the bottom. Bright covers (luma → 1) get a
       // lighter scrim, dark covers a stronger one; without a sampled luma the
       // legacy fixed tint alpha applies.
@@ -531,6 +589,8 @@
     const M = metrics || resolveTemplate(state.template);
     if (M.header === "none") return;
     const rtl = state.document.lyrics.isRtlLanguage;
+    const headerFontType = M.headerUsesBodyFont ? state.style.fontType : "classic";
+    const posterFontMode = resources && resources.posterFontMode;
     if (M.header === "compact") {
       const textStart = M.margin;
       const textEnd = M.logicalSize - M.margin;
@@ -539,9 +599,9 @@
       ctx.fillStyle = state.style.textColor;
       ctx.textAlign = rtl ? "right" : "left";
       ctx.textBaseline = "alphabetic";
-      ctx.font = fontSpec("classic", M.compactTitleSize, 800);
+      ctx.font = fontSpec(headerFontType, M.compactTitleSize, 800, posterFontMode);
       ctx.fillText(truncateText(ctx, state.document.track.title, textWidth), anchor, M.headerTop + M.compactTitleBaselineOffset);
-      ctx.font = fontSpec("classic", M.compactArtistSize, 500);
+      ctx.font = fontSpec(headerFontType, M.compactArtistSize, 500, posterFontMode);
       ctx.globalAlpha = 0.82;
       ctx.fillText(truncateText(ctx, state.document.track.artist, textWidth), anchor, M.headerTop + M.compactArtistBaselineOffset);
       ctx.globalAlpha = 1;
@@ -565,32 +625,35 @@
     ctx.textAlign = rtl ? "right" : "left";
     ctx.textBaseline = "alphabetic";
     const anchor = rtl ? textEnd : textStart;
-    ctx.font = fontSpec("classic", M.headerTitleSize, 800);
+    ctx.font = fontSpec(headerFontType, M.headerTitleSize, 800, posterFontMode);
     ctx.fillText(truncateText(ctx, state.document.track.title, textWidth), anchor, M.headerTop + M.headerTitleBaselineOffset);
-    ctx.font = fontSpec("classic", M.headerArtistSize, 500);
+    ctx.font = fontSpec(headerFontType, M.headerArtistSize, 500, posterFontMode);
     ctx.globalAlpha = 0.82;
     ctx.fillText(truncateText(ctx, state.document.track.artist, textWidth), anchor, M.headerTop + M.headerArtistBaselineOffset);
     ctx.globalAlpha = 1;
   }
 
-  function drawLyrics(ctx, state, metrics) {
+  function drawLyrics(ctx, state, metrics, resources) {
     const M = metrics || resolveTemplate(state.template);
     const rtl = state.document.lyrics.isRtlLanguage;
     const alignment = resolveAlignment(state.style.textAlignment, rtl);
-    const layout = createLyricsLayout(ctx, state, M);
+    const posterFontMode = resources && resources.posterFontMode;
+    const layout = createLyricsLayout(ctx, state, M, resources);
     const x = alignment === "center"
       ? M.logicalSize / 2
       : alignment === "right"
-        ? M.logicalSize - M.margin
-        : M.margin;
-    let y = M.lyricsTop;
+        ? M.logicalSize - M.lyricsInset
+        : M.lyricsInset;
+    let y = M.lyricsVerticalAlign === "center"
+      ? M.lyricsTop + Math.max(0, (M.lyricsBottom - M.lyricsTop - layout.height) / 2)
+      : M.lyricsTop;
 
     ctx.fillStyle = state.style.textColor;
     ctx.textAlign = alignment;
     ctx.textBaseline = "top";
     layout.groups.forEach((group, groupIndex) => {
       ctx.globalAlpha = 1;
-      ctx.font = fontSpec(state.style.fontType, layout.fontSize, 800);
+      ctx.font = fontSpec(state.style.fontType, layout.fontSize, 800, posterFontMode);
       group.rows.forEach((row) => {
         const clipped = y + layout.lineHeight > M.lyricsBottom
           ? truncateText(ctx, row, layout.width)
@@ -601,7 +664,7 @@
       if (group.translationRows.length) {
         y += M.translationGap;
         ctx.globalAlpha = 0.78;
-        ctx.font = fontSpec(state.style.fontType, layout.translationFontSize, 600);
+        ctx.font = fontSpec(state.style.fontType, layout.translationFontSize, 600, posterFontMode);
         group.translationRows.forEach((row) => {
           const clipped = y + layout.translationLineHeight > M.lyricsBottom
             ? truncateText(ctx, row, layout.width)
@@ -650,10 +713,11 @@
   // placeholder) and the track text moves to the margin. RTL mirrors the row.
   function drawTrackFooter(ctx, state, resources, M, source) {
     const rtl = state.document.lyrics.isRtlLanguage;
-    ctx.fillStyle = `rgba(255,255,255,${M.footerHairlineAlpha})`;
-    ctx.fillRect(M.margin, M.footerHairlineY, M.logicalSize - M.margin * 2, 1);
-
     const sourceLogoInset = drawSourceLogo(ctx, resources, M);
+    const ruleStart = M.margin + sourceLogoInset;
+    ctx.fillStyle = `rgba(255,255,255,${M.footerHairlineAlpha})`;
+    ctx.fillRect(ruleStart, M.footerHairlineY, M.logicalSize - M.margin - ruleStart, 1);
+
     const cover = resourceImage(resources, "cover");
     if (cover) {
       const chipX = rtl
@@ -710,13 +774,33 @@
   function drawSourceLogo(ctx, resources, M) {
     const logo = resourceImage(resources, "sourceLogo");
     if (!logo) return 0;
-    drawCoverImage(ctx, logo, {
-      x: M.margin,
-      y: M.footerBaseline - M.footerSourceLogoSize + 2,
-      width: M.footerSourceLogoSize,
-      height: M.footerSourceLogoSize,
-    }, Math.min(2, M.footerSourceLogoSize / 4));
-    return M.footerSourceLogoSize + M.footerSourceLogoGap;
+    const sourceWidth = Math.max(1, Number(logo.naturalWidth || logo.width) || 1);
+    const sourceHeight = Math.max(1, Number(logo.naturalHeight || logo.height) || 1);
+    const scale = Math.min(
+      M.footerSourceLogoSize / sourceHeight,
+      M.footerSourceLogoMaxWidth / sourceWidth,
+    );
+    const width = sourceWidth * scale;
+    const height = sourceHeight * scale;
+    const slotTop = Number.isFinite(M.footerSourceLogoTop)
+      ? M.footerSourceLogoTop
+      : M.footerBaseline - M.footerSourceLogoSize + 2;
+    const y = slotTop + (M.footerSourceLogoSize - height) / 2;
+    ctx.drawImage(logo, 0, 0, sourceWidth, sourceHeight, M.margin, y, width, height);
+    return width + M.footerSourceLogoGap;
+  }
+
+  function drawFallbackSourceMark(ctx, M, source) {
+    ctx.beginPath();
+    ctx.arc(M.margin + M.footerMarkOffsetX, M.footerBaseline + M.footerMarkOffsetY, M.footerMarkRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(M.margin + M.footerMarkInnerOffsetX, M.footerBaseline + M.footerMarkInnerOffsetY, M.footerMarkInnerRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.font = fontSpec("classic", M.footerSize, 800);
+    ctx.fillText(source, M.margin + M.footerTextOffsetX, M.footerBaseline);
   }
 
   function drawFooter(ctx, state, resources, metrics) {
@@ -725,6 +809,14 @@
       ? `GitHub · ${state.document.lyrics.provider}`
       : "GitHub Lyrics";
     ctx.save();
+    if (M.footer === "brandOnly") {
+      ctx.fillStyle = state.style.textColor;
+      ctx.textBaseline = "alphabetic";
+      ctx.textAlign = "left";
+      if (!drawSourceLogo(ctx, resources, M)) drawFallbackSourceMark(ctx, M, source);
+      ctx.restore();
+      return;
+    }
     if (M.footer === "trackline") {
       drawTrackFooter(ctx, state, resources, M, source);
       ctx.restore();
@@ -750,18 +842,7 @@
     ctx.textAlign = "left";
     ctx.font = fontSpec("classic", M.footerMarkSize, 800);
     const sourceLogoInset = drawSourceLogo(ctx, resources, M);
-    if (!sourceLogoInset) {
-      ctx.beginPath();
-      ctx.arc(M.margin + M.footerMarkOffsetX, M.footerBaseline + M.footerMarkOffsetY, M.footerMarkRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.beginPath();
-      ctx.arc(M.margin + M.footerMarkInnerOffsetX, M.footerBaseline + M.footerMarkInnerOffsetY, M.footerMarkInnerRadius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalCompositeOperation = "source-over";
-      ctx.font = fontSpec("classic", M.footerSize, 800);
-      ctx.fillText(source, M.margin + M.footerTextOffsetX, M.footerBaseline);
-    }
+    if (!sourceLogoInset) drawFallbackSourceMark(ctx, M, source);
     ctx.restore();
   }
 
@@ -775,9 +856,11 @@
     ctx.clearRect(0, 0, metrics.logicalSize, metrics.logicalSize);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
+    try { ctx.fontKerning = "normal"; } catch (_error) {}
+    try { ctx.textRendering = "geometricPrecision"; } catch (_error) {}
     drawBackground(ctx, state, resources, metrics);
     drawHeader(ctx, state, resources, metrics);
-    const lyricsLayout = drawLyrics(ctx, state, metrics);
+    const lyricsLayout = drawLyrics(ctx, state, metrics, resources);
     state.stickers.forEach((sticker) => {
       drawSticker(
         ctx,

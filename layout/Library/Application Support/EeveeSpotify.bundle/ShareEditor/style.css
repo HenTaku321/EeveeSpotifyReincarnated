@@ -4,6 +4,18 @@
  * 图标由 icons.js 注入 .icon-slot 占位，线宽统一走 --icon-stroke。
  */
 
+@font-face {
+  font-family: "MITM Poster Rounded";
+  src: url("./fonts/plus-jakarta-sans-latin-wght-normal.woff2") format("woff2-variations");
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: block;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC,
+    U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* ---- 基础 -------------------------------------------------------------- */
 
 * {
@@ -602,6 +614,7 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: var(--r-sm
 .font-wide .font-sample { font-family: "Arial Black", var(--font-sans); }
 .font-narrow .font-sample { font-family: "Arial Narrow", var(--font-sans); font-stretch: condensed; }
 .font-slanted .font-sample { font-family: Georgia, serif; font-style: italic; }
+.font-rounded .font-sample { font-family: "MITM Poster Rounded", ui-rounded, var(--font-sans); }
 
 /* 排版 */
 .segmented-pill {
@@ -626,6 +639,18 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: var(--r-sm
 }
 
 .segmented-pill button.is-selected { background: var(--surface-4); color: var(--text); }
+
+.control-field {
+  margin-top: var(--s-4);
+  display: grid;
+  gap: var(--s-2);
+  color: var(--text);
+  font-size: var(--fs-base);
+}
+
+.segmented-pill[data-control="sourceLogoVariant"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 
 .toggle-row {
   min-height: 44px;

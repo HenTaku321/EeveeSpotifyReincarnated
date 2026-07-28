@@ -11,10 +11,11 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  const FONT_TYPES = Object.freeze(["classic", "wide", "narrow", "slanted"]);
+  const FONT_TYPES = Object.freeze(["classic", "wide", "narrow", "slanted", "rounded"]);
   const TEXT_ALIGNMENTS = Object.freeze(["center", "leading", "trailing"]);
   const CAPS_MODES = Object.freeze(["normal", "allCaps"]);
-  // Card templates: skeleton keeps the legacy layout, lyrics (default) is the
+  const SOURCE_LOGO_VARIANTS = Object.freeze(["original", "white"]);
+  // Card templates: skeleton is the conservative default, lyrics is the
   // lyrics-dominant layout, poster bleeds the cover art into the background.
   const CARD_TEMPLATES = Object.freeze(["skeleton", "lyrics", "poster"]);
   const PROJECT_VERSION = 2;
@@ -388,12 +389,37 @@
     return deepFreeze(document);
   }
 
+  function normalizeEditorStyle(input, document) {
+    const style = isPlainObject(input) ? input : {};
+    return {
+      textColor: normalizeHexColor(style.textColor, document.colors.text),
+      backgroundColor: normalizeHexColor(style.backgroundColor, document.colors.background),
+      backgroundTintedColor: normalizeHexColor(style.backgroundTintedColor, "#000000").slice(0, 7),
+      fontType: FONT_TYPES.includes(style.fontType) ? style.fontType : "classic",
+      textAlignment: TEXT_ALIGNMENTS.includes(style.textAlignment)
+        ? style.textAlignment
+        : document.lyrics.isRtlLanguage ? "trailing" : "leading",
+      capsMode: CAPS_MODES.includes(style.capsMode) ? style.capsMode : "normal",
+      sourceLogoVariant: SOURCE_LOGO_VARIANTS.includes(style.sourceLogoVariant)
+        ? style.sourceLogoVariant
+        : "original",
+    };
+  }
+
   function createEditorState(input) {
     const document = input && input.document && Object.isFrozen(input.document)
       ? input.document
       : normalizeDocument(input && input.document ? input.document : input);
     const overrides = input && input.document ? input : {};
     const initialStyle = isPlainObject(overrides.style) ? overrides.style : {};
+
+    const template = CARD_TEMPLATES.includes(overrides.template) ? overrides.template : "skeleton";
+    const style = normalizeEditorStyle(initialStyle, document);
+    const styleBeforePoster = isPlainObject(overrides.styleBeforePoster)
+      ? normalizeEditorStyle(overrides.styleBeforePoster, document)
+      : template === "poster"
+        ? normalizeEditorStyle({}, document)
+        : null;
 
     return {
       document,
@@ -405,17 +431,9 @@
         false,
       ),
       edits: Object.create(null),
-      template: CARD_TEMPLATES.includes(overrides.template) ? overrides.template : "lyrics",
-      style: {
-        textColor: normalizeHexColor(initialStyle.textColor, document.colors.text),
-        backgroundColor: normalizeHexColor(initialStyle.backgroundColor, document.colors.background),
-        backgroundTintedColor: normalizeHexColor(initialStyle.backgroundTintedColor, "#000000").slice(0, 7),
-        fontType: FONT_TYPES.includes(initialStyle.fontType) ? initialStyle.fontType : "classic",
-        textAlignment: TEXT_ALIGNMENTS.includes(initialStyle.textAlignment)
-          ? initialStyle.textAlignment
-          : document.lyrics.isRtlLanguage ? "trailing" : "leading",
-        capsMode: CAPS_MODES.includes(initialStyle.capsMode) ? initialStyle.capsMode : "normal",
-      },
+      template,
+      style,
+      styleBeforePoster,
       media: {
         background: null,
         cover: null,
@@ -552,12 +570,35 @@
         if (action.key === "fontType" && !FONT_TYPES.includes(value)) return state;
         if (action.key === "textAlignment" && !TEXT_ALIGNMENTS.includes(value)) return state;
         if (action.key === "capsMode" && !CAPS_MODES.includes(value)) return state;
+        if (action.key === "sourceLogoVariant" && !SOURCE_LOGO_VARIANTS.includes(value)) return state;
         if (state.style[action.key] === value) return state;
         return { ...state, style: { ...state.style, [action.key]: value } };
       }
       case "setTemplate": {
         if (!CARD_TEMPLATES.includes(action.template)) return state;
         if (state.template === action.template) return state;
+        if (action.template === "poster") {
+          return {
+            ...state,
+            template: action.template,
+            styleBeforePoster: state.style,
+            style: {
+              ...state.style,
+              textColor: "#ffffff",
+              textAlignment: "center",
+              fontType: "rounded",
+              sourceLogoVariant: "white",
+            },
+          };
+        }
+        if (state.template === "poster") {
+          return {
+            ...state,
+            template: action.template,
+            style: state.styleBeforePoster || normalizeEditorStyle({}, state.document),
+            styleBeforePoster: null,
+          };
+        }
         return { ...state, template: action.template };
       }
       case "setPalette": {
@@ -705,6 +746,7 @@
       selectedLineIndices: state.selectedLineIndices,
       template: state.template,
       style: state.style,
+      styleBeforePoster: state.styleBeforePoster,
       media: state.media,
       stickers: state.stickers,
       activeStickerId: state.activeStickerId,
@@ -731,6 +773,7 @@
       document,
       selectedLineIndices: payload.selectedLineIndices,
       style: payload.style,
+      styleBeforePoster: payload.styleBeforePoster,
       template: payload.template,
     });
 
@@ -775,6 +818,7 @@
     FONT_TYPES,
     TEXT_ALIGNMENTS,
     CAPS_MODES,
+    SOURCE_LOGO_VARIANTS,
     CARD_TEMPLATES,
     PROJECT_VERSION,
     MAX_SELECTED_LINES,

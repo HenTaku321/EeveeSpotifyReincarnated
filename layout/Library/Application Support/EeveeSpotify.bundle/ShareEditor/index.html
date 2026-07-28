@@ -63,8 +63,8 @@
         </div>
         <footer class="preview-footer">
           <div class="template-switch" id="template-switch" role="group" aria-label="卡片模板">
-            <button type="button" data-template="skeleton" aria-pressed="false">骨架</button>
-            <button type="button" class="is-selected" data-template="lyrics" aria-pressed="true">歌词</button>
+            <button type="button" class="is-selected" data-template="skeleton" aria-pressed="true">骨架</button>
+            <button type="button" data-template="lyrics" aria-pressed="false">歌词</button>
             <button type="button" data-template="poster" aria-pressed="false">海报</button>
           </div>
           <div class="export-bar" aria-label="导出工具">
@@ -122,6 +122,7 @@
             <button type="button" class="font-card font-wide" data-value="wide"><span class="font-sample" aria-hidden="true">Aa</span><span class="font-name">Wide</span></button>
             <button type="button" class="font-card font-narrow" data-value="narrow"><span class="font-sample" aria-hidden="true">Aa</span><span class="font-name">Narrow</span></button>
             <button type="button" class="font-card font-slanted" data-value="slanted"><span class="font-sample" aria-hidden="true">Aa</span><span class="font-name">Slanted</span></button>
+            <button type="button" class="font-card font-rounded" data-value="rounded"><span class="font-sample" aria-hidden="true">Aa</span><span class="font-name">Rounded</span></button>
           </div>
         </section>
 
@@ -136,6 +137,13 @@
             <span>全部大写</span>
             <input id="caps-toggle" type="checkbox" role="switch">
           </label>
+          <div class="control-field">
+            <span>左下角 Logo</span>
+            <div class="segmented-pill" data-control="sourceLogoVariant" role="group" aria-label="左下角 Logo 颜色">
+              <button type="button" class="is-selected" data-value="original">原色</button>
+              <button type="button" data-value="white">白色</button>
+            </div>
+          </div>
         </section>
 
         <section class="tool-section" data-mobile-tool="media" aria-labelledby="section-media-title">

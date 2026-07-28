@@ -38,12 +38,17 @@
   const MAX_PROJECT_BYTES = State.MAX_PROJECT_BYTES;
   const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
   const MAX_PREVIEW_CSS_SIZE = 560;
-  const SOURCE_LOGO_URL = "./source-logo";
+  const SOURCE_LOGO_URLS = Object.freeze({
+    original: "./source-logo",
+    white: "./source-logo?variant=white",
+  });
   const INTERMEDIATE_INSPECTOR_MIN_SIZE = 144;
   const INTERMEDIATE_PREVIEW_MIN_SIZE = 180;
   const INTERMEDIATE_SPLITTER_SIZE = 12;
   const INTERMEDIATE_INSPECTOR_DEFAULT_SIZE = 192;
   const INTERMEDIATE_INSPECTOR_KEY_STEP = 16;
+  const MIN_PREVIEW_SCALE = 4;
+  const MAX_PREVIEW_SCALE = 9;
   const EXPORT_SCALES = Object.freeze({ 891: 3, 1782: 6, 2673: 9 });
   const DEFAULT_EXPORT_PIXELS = 1782;
   const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -83,6 +88,28 @@
   let mountedController = null;
   let pendingDocument = null;
   let pendingState = null;
+
+  function sourceLogoURL(variant) {
+    return SOURCE_LOGO_URLS[variant] || SOURCE_LOGO_URLS.original;
+  }
+
+  async function loadPosterFont(fontSet) {
+    if (!fontSet || typeof fontSet.load !== "function") return "fallback";
+    try {
+      await Promise.all([
+        fontSet.load('800 24px "MITM Poster Rounded"', "Spotify poster 0123"),
+        fontSet.load('600 12px "MITM Poster Rounded"', "Translation 0123"),
+        fontSet.load('500 11px "MITM Poster Rounded"', "Track artist 0123"),
+      ]);
+      if (fontSet.ready && typeof fontSet.ready.then === "function") await fontSet.ready;
+      if (typeof fontSet.check !== "function") return "custom";
+      return fontSet.check('800 24px "MITM Poster Rounded"', "Spotify poster 0123")
+        ? "custom"
+        : "fallback";
+    } catch (_error) {
+      return "fallback";
+    }
+  }
 
   function createDocumentGateway(options) {
     const fetchImpl = options && options.fetchImpl;
@@ -263,14 +290,15 @@
       const coverSource = state.media.cover && state.media.cover.src
         ? state.media.cover.src
         : state.document.track.coverUrl;
-      const wanted = new Set([SOURCE_LOGO_URL, backgroundSource, coverSource, ...state.stickers.map((sticker) => sticker.imageData)].filter(Boolean));
+      const sourceLogoSource = sourceLogoURL(state.style.sourceLogoVariant);
+      const wanted = new Set([sourceLogoSource, backgroundSource, coverSource, ...state.stickers.map((sticker) => sticker.imageData)].filter(Boolean));
       Array.from(this.cache.keys()).forEach((source) => {
         if (!wanted.has(source)) this.release(source);
       });
       const [background, cover, sourceLogo, stickerEntries] = await Promise.all([
         this.get(backgroundSource),
         this.get(coverSource),
-        this.get(SOURCE_LOGO_URL),
+        this.get(sourceLogoSource),
         Promise.all(state.stickers.map(async (sticker) => [sticker.id, await this.get(sticker.imageData)])),
       ]);
       return {
@@ -395,6 +423,13 @@
     return Math.max(0, Math.floor(Math.min(availableWidth, availableHeight, limit)));
   }
 
+  function resolvePreviewScale(cssPixels, devicePixelRatio) {
+    const size = Math.max(0, Number(cssPixels) || 0);
+    const dpr = Math.max(1, Number(devicePixelRatio) || 1);
+    const required = size > 0 ? Math.ceil((size * dpr) / Renderer.LAYOUT.logicalSize) : MIN_PREVIEW_SCALE;
+    return Math.min(MAX_PREVIEW_SCALE, Math.max(MIN_PREVIEW_SCALE, required));
+  }
+
   function resolveIntermediateInspectorSize(gridHeight, requestedSize) {
     const height = Math.max(0, Math.floor(Number(gridHeight) || 0));
     const min = INTERMEDIATE_INSPECTOR_MIN_SIZE;
@@ -432,12 +467,14 @@
     constructor(documentInput) {
       this.elements = this.collectElements();
       this.imageCache = new ImageCache();
+      this.posterFontReadiness = loadPosterFont(root.document && root.document.fonts);
       this.history = State.createHistory(State.createEditorState(documentInput));
       this.resources = { background: null, cover: null, sourceLogo: null, stickers: new Map() };
       this.renderGeneration = 0;
       this.gesture = null;
       this.inspectorResizeGesture = null;
       this.intermediateInspectorSize = INTERMEDIATE_INSPECTOR_DEFAULT_SIZE;
+      this.previewRenderScale = MIN_PREVIEW_SCALE;
       // 行编辑展开是纯局部 UI 状态：不进 history，也不参与序列化。
       this.expandedLineIndex = null;
       this.repositoryPath = "lyrics";
@@ -466,8 +503,12 @@
 
     bindPreviewSizing() {
       const update = () => {
+        const previousScale = this.previewRenderScale;
         this.setIntermediateInspectorSize(this.intermediateInspectorSize);
         this.syncPreviewCanvasSize();
+        if (this.renderGeneration > 0 && this.previewRenderScale !== previousScale) {
+          this.scheduleCanvasRender(this.history.state);
+        }
       };
       update();
       if (typeof root.ResizeObserver === "function") {
@@ -502,6 +543,7 @@
       canvas.style.inlineSize = sizeValue;
       canvas.style.height = sizeValue;
       canvas.style.blockSize = sizeValue;
+      this.previewRenderScale = resolvePreviewScale(size, root.devicePixelRatio);
       return true;
     }
 
@@ -821,10 +863,21 @@
     async scheduleCanvasRender(state) {
       const generation = ++this.renderGeneration;
       const effective = effectiveMediaState(state);
-      const resources = await this.imageCache.resolve(effective);
+      const [resolvedResources, posterFontMode] = await Promise.all([this.imageCache.resolve(effective), this.posterFontReadiness]);
       if (generation !== this.renderGeneration) return;
+      const resources = { ...resolvedResources, posterFontMode };
       this.resources = resources;
-      Renderer.renderToCanvas(this.elements.previewCanvas, effective, resources, { showSelection: true });
+      this.previewRenderScale = Math.max(
+        this.previewRenderScale,
+        resolvePreviewScale(
+          this.elements.previewCanvas.getBoundingClientRect().width,
+          root.devicePixelRatio,
+        ),
+      );
+      Renderer.renderToCanvas(this.elements.previewCanvas, effective, resources, {
+        showSelection: true,
+        scale: this.previewRenderScale,
+      });
     }
 
     activateMobileTool(name) {
@@ -1327,7 +1380,10 @@
       if (!this.gesture || event.pointerId !== this.gesture.pointerId) return;
       const sticker = this.transformedSticker(event);
       const draft = State.reduceEditorState(this.history.state, { type: "replaceSticker", sticker });
-      Renderer.renderToCanvas(this.elements.previewCanvas, effectiveMediaState(draft), this.resources, { showSelection: true });
+      Renderer.renderToCanvas(this.elements.previewCanvas, effectiveMediaState(draft), this.resources, {
+        showSelection: true,
+        scale: this.previewRenderScale,
+      });
     }
 
     pointerUp(event) {
@@ -1372,7 +1428,8 @@
     async renderExport() {
       const state = effectiveMediaState(this.history.state);
       const exportSpec = resolveExportSpec(this.elements.exportResolution.value);
-      let resources = await this.imageCache.resolve(state);
+      const [resolvedResources, posterFontMode] = await Promise.all([this.imageCache.resolve(state), this.posterFontReadiness]);
+      let resources = { ...resolvedResources, posterFontMode };
       Renderer.renderToCanvas(this.elements.exportCanvas, state, resources, { showSelection: false, scale: exportSpec.scale });
       try {
         this.elements.exportCanvas.getContext("2d").getImageData(0, 0, 1, 1);
@@ -1473,10 +1530,13 @@
     DEMO_DOCUMENT,
     createDocumentGateway,
     calculatePreviewSquareSize,
+    resolvePreviewScale,
     resolveIntermediateInspectorSize,
     effectiveMediaState,
     replaceChildrenPreservingScroll,
     resolveExportSpec,
+    sourceLogoURL,
+    loadPosterFont,
     safeImageSource,
     sanitizeFilename,
     publicApi,
