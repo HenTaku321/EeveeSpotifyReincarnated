@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const ShareState = require("../layout/Library/Application Support/EeveeSpotify.bundle/ShareEditor/editor-state.js");
+const ShareApp = require("../layout/Library/Application Support/EeveeSpotify.bundle/ShareEditor/app.js");
 const TimelineState = require("../layout/Library/Application Support/EeveeSpotify.bundle/TimelineEditor/editor-state.js");
 const SHARE_BUNDLE = path.join(__dirname, "../layout/Library/Application Support/EeveeSpotify.bundle/ShareEditor");
 
@@ -49,6 +50,38 @@ test("native bridge keeps lyrics documents at 8 MiB while allowing 32 MiB PNG ex
   assert.match(controller, /encodedDocument\.count > Self\.maximumDocumentBytes/);
   assert.match(controller, /data\.count <= Self\.maximumDocumentBytes/);
   assert.doesNotMatch(controller, /LyricsShareEditorPNG\.maximumBytes/);
+});
+
+test("native iOS source logos override the file URL fallback without entering editor state", () => {
+  assert.equal(ShareApp.sourceLogoURL("original"), "./source-logo");
+  assert.equal(ShareApp.sourceLogoURL("white"), "./source-logo?variant=white");
+  assert.equal(typeof ShareApp.setSourceLogos, "function");
+  assert.equal(typeof ShareApp.publicApi.setSourceLogos, "function");
+
+  ShareApp.publicApi.setSourceLogos({ original: TINY_PNG });
+  assert.equal(ShareApp.sourceLogoURL("original"), TINY_PNG);
+  assert.equal(ShareApp.sourceLogoURL("white"), TINY_PNG);
+
+  const state = ShareState.createEditorState({
+    source: "github",
+    hash: HASH,
+    track: { trackId: "track-1", title: "Title", artist: "Artist", album: "Album" },
+    lyrics: { lines: [{ words: "Line" }], alternatives: [] },
+  });
+  assert.equal(ShareState.serializeState(state).includes(TINY_PNG), false);
+
+  assert.throws(
+    () => ShareApp.publicApi.setSourceLogos({ original: "https://example.test/logo.png" }),
+    /base64|PNG|JPEG|WebP|图片/i,
+  );
+  ShareApp.publicApi.setSourceLogos(null);
+  assert.equal(ShareApp.sourceLogoURL("original"), "./source-logo");
+
+  const configuration = readSource("LyricsShareEditorConfiguration.swift");
+  const controller = readSource("LyricsShareEditorViewController.swift");
+  assert.match(configuration, /share-editor\/source-logo/);
+  assert.match(controller, /sourceLogoLoader\.resolve/);
+  assert.match(controller, /window\.ShareEditor\.setSourceLogos/);
 });
 
 test("captured artwork remains a cover without becoming the default background", () => {
@@ -176,4 +209,12 @@ test("timeline draft round-trip never migrates parenthetical translations to alt
   TimelineState.restoreState(restored, TimelineState.serializeState(state));
   assert.equal(TimelineState.lines(restored)[0].words, "Original (旧译文)");
   assert.equal(restored.document.lyrics.lyrics.alternatives, undefined);
+});
+
+test("native timeline draft validation accepts the current web draft version", () => {
+  const controller = readSource("LyricsTimelineEditorViewController.swift");
+  const match = controller.match(/private static let draftVersion = (\d+)/);
+  assert.ok(match, "the native draft contract must expose one explicit version");
+  assert.equal(Number(match[1]), TimelineState.VERSION);
+  assert.match(controller, /\(object\["version"\] as\? NSNumber\)\?\.intValue == Self\.draftVersion/);
 });

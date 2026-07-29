@@ -27,6 +27,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
     private var projectReady = false
     private var activeTrack: LyricsShareEditorTrack?
     private let artworkLoader = LyricsShareEditorArtworkLoader()
+    private let sourceLogoLoader = LyricsShareEditorSourceLogoLoader()
     private var exportInFlight = false
     private var isClosing = false
     private var closeAttemptID: UUID?
@@ -345,6 +346,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
 
     private func fetchLyrics(for track: LyricsShareEditorTrack) {
         artworkLoader.cancel()
+        sourceLogoLoader.cancel()
         requestTask?.cancel()
         session?.invalidateAndCancel()
         sessionDelegate = nil
@@ -384,6 +386,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
                 self?.finishLyricsRequest(
                     requestID: requestID,
                     track: track,
+                    configuration: configuration,
                     data: data,
                     response: response,
                     error: error
@@ -398,7 +401,8 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
         requestTask?.resume()
     }
 
-    private func finishLyricsRequest(requestID: UUID, track: LyricsShareEditorTrack, data: Data,
+    private func finishLyricsRequest(requestID: UUID, track: LyricsShareEditorTrack,
+                                     configuration: LyricsShareEditorConfiguration, data: Data,
                                      response: URLResponse?, error: Error?) {
         guard activeRequestID == requestID else { return }
         activeRequestID = nil
@@ -435,7 +439,12 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
                 throw LyricsShareEditorError.invalidResponse("歌词服务返回的曲目身份与当前歌曲不一致。")
             }
             if let artworkDataURL = LyricsShareEditorTrackResolver.currentArtworkDataURL(matching: track) {
-                try finishLyricsDocument(object, track: track, artworkDataURL: artworkDataURL)
+                try finishLyricsDocument(
+                    object,
+                    track: track,
+                    artworkDataURL: artworkDataURL,
+                    configuration: configuration
+                )
                 return
             }
             let remoteURL = LyricsShareEditorTrackResolver.currentArtworkRemoteURL(matching: track)
@@ -445,7 +454,12 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
                       !self.isClosing, !self.hasReleasedWebView,
                       self.activeTrack?.trackId == track.trackId else { return }
                 do {
-                    try self.finishLyricsDocument(object, track: track, artworkDataURL: artworkDataURL)
+                    try self.finishLyricsDocument(
+                        object,
+                        track: track,
+                        artworkDataURL: artworkDataURL,
+                        configuration: configuration
+                    )
                 } catch {
                     self.showError(error.localizedDescription)
                 }
@@ -456,7 +470,8 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
     }
 
     private func finishLyricsDocument(_ source: [String: Any], track: LyricsShareEditorTrack,
-                                      artworkDataURL: String?) throws {
+                                      artworkDataURL: String?,
+                                      configuration: LyricsShareEditorConfiguration) throws {
         var object = source
         var trackObject: [String: Any] = [
             "trackId": track.trackId,
@@ -473,7 +488,17 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
             }
         }
         object["track"] = trackObject
-        try injectDocument(object)
+        showStatus("正在读取品牌 Logo…", retryEnabled: false)
+        sourceLogoLoader.resolve(configuration: configuration) { [weak self] sourceLogos in
+            guard let self = self,
+                  !self.isClosing, !self.hasReleasedWebView,
+                  self.activeTrack?.trackId == track.trackId else { return }
+            do {
+                try self.injectDocument(object, sourceLogos: sourceLogos)
+            } catch {
+                self.showError(error.localizedDescription)
+            }
+        }
     }
 
     private func matchesIdentity(_ value: Any?, _ expected: String) -> Bool {
@@ -484,7 +509,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
         ) == .orderedSame
     }
 
-    private func injectDocument(_ document: [String: Any]) throws {
+    private func injectDocument(_ document: [String: Any], sourceLogos: [String: String]) throws {
         guard JSONSerialization.isValidJSONObject(document) else {
             throw LyricsShareEditorError.invalidResponse("歌词文档不是有效 JSON。")
         }
@@ -493,6 +518,14 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
             throw LyricsShareEditorError.invalidResponse("歌词文档超过大小限制。")
         }
         let encoded = data.base64EncodedString()
+        guard JSONSerialization.isValidJSONObject(sourceLogos) else {
+            throw LyricsShareEditorError.invalidResponse("歌词品牌 Logo 数据无效。")
+        }
+        let sourceLogosData = try JSONSerialization.data(withJSONObject: sourceLogos, options: [])
+        guard sourceLogosData.count <= Self.maximumDocumentBytes * 2 else {
+            throw LyricsShareEditorError.invalidResponse("歌词品牌 Logo 数据超过大小限制。")
+        }
+        let sourceLogosEncoded = sourceLogosData.base64EncodedString()
         let projectScript: String
         var preservedProjectName: String?
         switch loadProject(for: activeTrack?.trackId) {
@@ -528,6 +561,9 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
         (() => {
           const bytes = Uint8Array.from(atob('\(encoded)'), character => character.charCodeAt(0));
           if (!window.ShareEditor) return false;
+          const sourceLogoBytes = Uint8Array.from(atob('\(sourceLogosEncoded)'), character => character.charCodeAt(0));
+          const sourceLogos = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(sourceLogoBytes));
+          window.ShareEditor.setSourceLogos(sourceLogos);
           const editorDocument = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
           window.ShareEditor.loadDocument(editorDocument);
           let projectRestored = true;
@@ -806,6 +842,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
         projectTimer?.invalidate()
         projectTimer = nil
         artworkLoader.cancel()
+        sourceLogoLoader.cancel()
         requestTask?.cancel()
         requestTask = nil
         session?.invalidateAndCancel()

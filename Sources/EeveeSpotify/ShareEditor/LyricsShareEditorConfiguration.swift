@@ -3,9 +3,12 @@ import Foundation
 struct LyricsShareEditorConfiguration {
     static let endpointPath = "v1/share-editor/lyrics"
     static let editEndpointPath = "v1/lyrics/edit"
+    static let sourceLogoEndpointPath = "share-editor/source-logo"
 
     let endpointURL: URL
     let editEndpointURL: URL
+    let sourceLogoURL: URL
+    let sourceLogoWhiteURL: URL
     let token: String
 
     static func current() throws -> LyricsShareEditorConfiguration {
@@ -48,9 +51,18 @@ struct LyricsShareEditorConfiguration {
             throw LyricsShareEditorError.configuration("歌词服务地址无效。")
         }
 
+        let sourceLogoURL = baseURL.appendingPathComponent(sourceLogoEndpointPath)
+        var whiteComponents = URLComponents(url: sourceLogoURL, resolvingAgainstBaseURL: false)
+        whiteComponents?.queryItems = [URLQueryItem(name: "variant", value: "white")]
+        guard let sourceLogoWhiteURL = whiteComponents?.url else {
+            throw LyricsShareEditorError.configuration("歌词服务地址无法生成 Logo 资源地址。")
+        }
+
         return LyricsShareEditorConfiguration(
             endpointURL: baseURL.appendingPathComponent(endpointPath),
             editEndpointURL: baseURL.appendingPathComponent(editEndpointPath),
+            sourceLogoURL: sourceLogoURL,
+            sourceLogoWhiteURL: sourceLogoWhiteURL,
             token: token
         )
     }

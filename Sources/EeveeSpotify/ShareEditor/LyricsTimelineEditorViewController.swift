@@ -11,6 +11,7 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
 
     private static let maximumDocumentBytes = 8 * 1024 * 1024
     private static let maximumDraftBytes = 8 * 1024 * 1024
+    private static let draftVersion = 2
 
     private let webView: WKWebView
     private let bridge: LyricsTimelineEditorBridge
@@ -574,7 +575,7 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
     private static func validateDraft(_ data: Data, trackID: String) -> Bool {
         guard let decoded = try? JSONSerialization.jsonObject(with: data),
               let object = decoded as? [String: Any],
-              (object["version"] as? NSNumber)?.intValue == 1,
+              (object["version"] as? NSNumber)?.intValue == Self.draftVersion,
               let document = object["document"] as? [String: Any],
               let track = document["track"] as? [String: Any],
               track["trackId"] as? String == trackID else { return false }

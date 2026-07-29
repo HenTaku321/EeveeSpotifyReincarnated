@@ -88,9 +88,33 @@
   let mountedController = null;
   let pendingDocument = null;
   let pendingState = null;
+  let sourceLogoOverrides = Object.freeze({});
 
   function sourceLogoURL(variant) {
-    return SOURCE_LOGO_URLS[variant] || SOURCE_LOGO_URLS.original;
+    const resolvedVariant = Object.prototype.hasOwnProperty.call(SOURCE_LOGO_URLS, variant)
+      ? variant
+      : "original";
+    return sourceLogoOverrides[resolvedVariant]
+      || (resolvedVariant === "white" ? sourceLogoOverrides.original : "")
+      || SOURCE_LOGO_URLS[resolvedVariant];
+  }
+
+  function setSourceLogos(sources) {
+    const input = sources == null ? {} : sources;
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      throw new TypeError("source logos must be an object");
+    }
+    const next = {};
+    for (const variant of Object.keys(SOURCE_LOGO_URLS)) {
+      if (!Object.prototype.hasOwnProperty.call(input, variant)) continue;
+      next[variant] = State.validateImageDataURL(input[variant]);
+    }
+    sourceLogoOverrides = Object.freeze(next);
+    if (mountedController) {
+      mountedController.imageCache.clear();
+      mountedController.renderAll({ rebuildLyrics: false });
+    }
+    return sourceLogoOverrides;
   }
 
   const BUNDLED_FONT_PROBES = Object.freeze({
@@ -1501,6 +1525,9 @@
   }
 
   const publicApi = {
+    setSourceLogos(sources) {
+      return setSourceLogos(sources);
+    },
     loadDocument(document) {
       if (mountedController) return Promise.resolve(mountedController.loadDocument(document));
       pendingDocument = State.normalizeDocument(document);
@@ -1560,6 +1587,7 @@
     replaceChildrenPreservingScroll,
     resolveExportSpec,
     sourceLogoURL,
+    setSourceLogos,
     loadEditorFonts,
     safeImageSource,
     sanitizeFilename,
