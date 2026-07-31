@@ -9,6 +9,9 @@ struct LyricsEditorSingalongEntryGroup: HookGroup {}
 private var lyricsCardEntryAssociationKey: UInt8 = 0
 private var lyricsCardEntryRetryAssociationKey: UInt8 = 0
 private var lyricsFullscreenEntryAssociationKey: UInt8 = 0
+private var lyricsEditorCardEntryGroupActivated = false
+private var lyricsEditorFullscreenEntryGroupActivated = false
+private var lyricsEditorSingalongEntryGroupActivated = false
 
 private enum LyricsEditorEntryIdentity {
     static let share = "mitm-lyrics-studio.share"
@@ -381,7 +384,8 @@ class LyricsSingalongFullscreenEditorEntryHook: ClassHook<UIViewController> {
     }
 }
 
-func activateLyricsEditorEntries() {
+@discardableResult
+func activateLyricsEditorEntries() -> Bool {
     let cardClass = NSClassFromString("Lyrics_CardElementImpl.CardHeaderView")
     let fullscreenClass = NSClassFromString(
         "Lyrics_FullscreenElementPageImpl.FullscreenElementViewController"
@@ -391,34 +395,49 @@ func activateLyricsEditorEntries() {
     )
     var activated = [String]()
 
-    if let cardClass = cardClass,
-       class_getInstanceMethod(cardClass, #selector(UIView.didMoveToWindow)) != nil,
-       class_getInstanceMethod(cardClass, #selector(UIView.layoutSubviews)) != nil {
-        LyricsEditorCardEntryGroup().activate()
-        activated.append("card")
-    } else {
-        writeDebugLog("[LyricsEditor] skipped card entry hook: class/lifecycle mismatch")
+    if !lyricsEditorCardEntryGroupActivated {
+        if let cardClass = cardClass,
+           class_getInstanceMethod(cardClass, #selector(UIView.didMoveToWindow)) != nil,
+           class_getInstanceMethod(cardClass, #selector(UIView.layoutSubviews)) != nil {
+            LyricsEditorCardEntryGroup().activate()
+            lyricsEditorCardEntryGroupActivated = true
+            activated.append("card")
+        } else {
+            writeDebugLog("[LyricsEditor] skipped card entry hook: class/lifecycle mismatch")
+        }
     }
 
-    if let fullscreenClass = fullscreenClass,
-       class_getInstanceMethod(fullscreenClass, #selector(UIViewController.viewDidAppear(_:))) != nil {
-        LyricsEditorFullscreenEntryGroup().activate()
-        activated.append("fullscreen")
-    } else {
-        writeDebugLog("[LyricsEditor] skipped fullscreen entry hook: class/selector mismatch")
+    if !lyricsEditorFullscreenEntryGroupActivated {
+        if let fullscreenClass = fullscreenClass,
+           class_getInstanceMethod(fullscreenClass, #selector(UIViewController.viewDidAppear(_:))) != nil {
+            LyricsEditorFullscreenEntryGroup().activate()
+            lyricsEditorFullscreenEntryGroupActivated = true
+            activated.append("fullscreen")
+        } else {
+            writeDebugLog("[LyricsEditor] skipped fullscreen entry hook: class/selector mismatch")
+        }
     }
 
-    if let singalongClass = singalongClass,
-       class_getInstanceMethod(singalongClass, #selector(UIViewController.viewDidAppear(_:))) != nil {
-        LyricsEditorSingalongEntryGroup().activate()
-        activated.append("singalong")
-    } else {
-        writeDebugLog("[LyricsEditor] skipped singalong entry hook: class/selector mismatch")
+    if !lyricsEditorSingalongEntryGroupActivated {
+        if let singalongClass = singalongClass,
+           class_getInstanceMethod(singalongClass, #selector(UIViewController.viewDidAppear(_:))) != nil {
+            LyricsEditorSingalongEntryGroup().activate()
+            lyricsEditorSingalongEntryGroupActivated = true
+            activated.append("singalong")
+        } else {
+            writeDebugLog("[LyricsEditor] skipped singalong entry hook: class/selector mismatch")
+        }
     }
 
-    guard !activated.isEmpty else {
+    if !activated.isEmpty {
+        writeDebugLog("[LyricsEditor] entry hooks activated: \(activated.joined(separator: ","))")
+    } else if !lyricsEditorCardEntryGroupActivated,
+              !lyricsEditorFullscreenEntryGroupActivated,
+              !lyricsEditorSingalongEntryGroupActivated {
         writeDebugLog("[LyricsEditor] skipped entry hooks: Spotify 9.1.x class/selector mismatch")
-        return
     }
-    writeDebugLog("[LyricsEditor] entry hooks activated: \(activated.joined(separator: ","))")
+
+    return lyricsEditorCardEntryGroupActivated
+        && lyricsEditorFullscreenEntryGroupActivated
+        && lyricsEditorSingalongEntryGroupActivated
 }

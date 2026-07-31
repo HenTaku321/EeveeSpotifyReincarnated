@@ -57,6 +57,27 @@ test("standalone target owns runtime, player observation and C invocation helper
   assert.match(moduleMap, /module MITMLyricsStudioC/);
 });
 
+test("standalone bootstrap retries late Spotify classes without reactivating hook groups", () => {
+  const bootstrap = read("Sources/MITMLyricsStudio/StandaloneBootstrap.swift");
+  const playerHooks = read("Sources/MITMLyricsStudio/StandalonePlayerHooks.x.swift");
+  const entryHooks = read("Sources/EeveeSpotify/ShareEditor/LyricsEditorEntryHooks.x.swift");
+
+  assert.match(bootstrap, /standaloneActivationMaximumAttempts\s*=\s*\d+/);
+  assert.match(bootstrap, /scheduleStandaloneActivation\(attempt:\s*1\)/);
+  assert.match(bootstrap, /DispatchQueue\.main\.asyncAfter/);
+  assert.match(bootstrap, /if playerReady && entriesReady/);
+  assert.match(bootstrap, /attempt < standaloneActivationMaximumAttempts/);
+
+  assert.match(playerHooks, /standaloneObserverHookActivated/);
+  assert.match(playerHooks, /standaloneStatefulPlayerHookActivated/);
+  assert.doesNotMatch(playerHooks, /standalonePlayerHooksActivated/);
+
+  assert.match(entryHooks, /lyricsEditorCardEntryGroupActivated/);
+  assert.match(entryHooks, /lyricsEditorFullscreenEntryGroupActivated/);
+  assert.match(entryHooks, /lyricsEditorSingalongEntryGroupActivated/);
+  assert.match(entryHooks, /@discardableResult\s+func activateLyricsEditorEntries\(\) -> Bool/);
+});
+
 test("standalone workflow emits a TrollFools archive without Eevee payloads", () => {
   const workflow = read(".github/workflows/build-standalone-lyrics-studio.yml");
   assert.match(workflow, /make -f Makefile\.standalone/);

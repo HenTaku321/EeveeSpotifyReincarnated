@@ -51,30 +51,39 @@ class MITMLyricsStatefulPlayerHook: ClassHook<NSObject> {
     }
 }
 
-private var standalonePlayerHooksActivated = false
+private var standaloneObserverHookActivated = false
+private var standaloneStatefulPlayerHookActivated = false
 
-func activateStandalonePlayerHooks() {
-    guard !standalonePlayerHooksActivated else { return }
-    standalonePlayerHooksActivated = true
-
-    if let serviceClass = NSClassFromString("SPTPlayerServiceImplementation"),
-       class_getInstanceMethod(serviceClass, NSSelectorFromString("addPlayerObserver:")) != nil {
-        StandalonePlayerObserverGroup().activate()
-    } else {
-        writeDebugLog("[Player] observer hook unavailable")
+@discardableResult
+func activateStandalonePlayerHooks() -> Bool {
+    if !standaloneObserverHookActivated {
+        if let serviceClass = NSClassFromString("SPTPlayerServiceImplementation"),
+           class_getInstanceMethod(serviceClass, NSSelectorFromString("addPlayerObserver:")) != nil {
+            StandalonePlayerObserverGroup().activate()
+            standaloneObserverHookActivated = true
+            writeDebugLog("[Player] observer hook activated")
+        } else {
+            writeDebugLog("[Player] observer hook unavailable")
+        }
     }
 
-    let className = "NowPlaying_PlatformImpl.NowPlayingPlatformSwiftServiceImplementation"
-    let selector = NSSelectorFromString("provideStatefulPlayerWithFeatureIdentifier:")
-    if let serviceClass = NSClassFromString(className),
-       let method = class_getInstanceMethod(serviceClass, selector),
-       method_getNumberOfArguments(method) == 3,
-       methodReturnType(method) == "@",
-       methodArgumentType(method, index: 2) == "@" {
-        StandaloneStatefulPlayerGroup().activate()
-    } else {
-        writeDebugLog("[Player] stateful player hook unavailable")
+    if !standaloneStatefulPlayerHookActivated {
+        let className = "NowPlaying_PlatformImpl.NowPlayingPlatformSwiftServiceImplementation"
+        let selector = NSSelectorFromString("provideStatefulPlayerWithFeatureIdentifier:")
+        if let serviceClass = NSClassFromString(className),
+           let method = class_getInstanceMethod(serviceClass, selector),
+           method_getNumberOfArguments(method) == 3,
+           methodReturnType(method) == "@",
+           methodArgumentType(method, index: 2) == "@" {
+            StandaloneStatefulPlayerGroup().activate()
+            standaloneStatefulPlayerHookActivated = true
+            writeDebugLog("[Player] stateful player hook activated")
+        } else {
+            writeDebugLog("[Player] stateful player hook unavailable")
+        }
     }
+
+    return standaloneObserverHookActivated && standaloneStatefulPlayerHookActivated
 }
 
 private func methodReturnType(_ method: Method) -> String {
