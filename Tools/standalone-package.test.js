@@ -38,7 +38,7 @@ test("standalone target owns unique package and resource identities", () => {
 test("standalone target owns runtime, player observation and C invocation helpers", () => {
   const compatibility = read("Sources/MITMLyricsStudio/StandaloneCompatibility.swift");
   const hooks = read("Sources/MITMLyricsStudio/StandalonePlayerHooks.x.swift");
-  const bootstrap = read("Sources/MITMLyricsStudio/StandaloneBootstrap.swift");
+  const bootstrap = read("Sources/MITMLyricsStudio/StandaloneBootstrap.x.swift");
   const cBridge = read("Sources/MITMLyricsStudioC/Tweak.m");
   const moduleMap = read("Sources/MITMLyricsStudioC/include/module.modulemap");
 
@@ -58,7 +58,10 @@ test("standalone target owns runtime, player observation and C invocation helper
 });
 
 test("standalone bootstrap retries late Spotify classes without reactivating hook groups", () => {
-  const bootstrap = read("Sources/MITMLyricsStudio/StandaloneBootstrap.swift");
+  assert.equal(exists("Sources/MITMLyricsStudio/StandaloneBootstrap.x.swift"), true);
+  assert.equal(exists("Sources/MITMLyricsStudio/StandaloneBootstrap.swift"), false);
+
+  const bootstrap = read("Sources/MITMLyricsStudio/StandaloneBootstrap.x.swift");
   const playerHooks = read("Sources/MITMLyricsStudio/StandalonePlayerHooks.x.swift");
   const entryHooks = read("Sources/EeveeSpotify/ShareEditor/LyricsEditorEntryHooks.x.swift");
 
