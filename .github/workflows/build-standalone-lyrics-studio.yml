@@ -95,6 +95,10 @@ jobs:
           dylib="$(find "$RUNNER_TEMP/deb-root" -type f -name 'MITMLyricsStudio.dylib' -print -quit)"
           bundle="$(find "$RUNNER_TEMP/deb-root" -type d -name 'MITMLyricsStudio.bundle' -print -quit)"
           test -n "$dylib"
+          bootstrap_strings="$RUNNER_TEMP/mitm-lyrics-studio.strings"
+          strings -a "$dylib" > "$bootstrap_strings"
+          grep -Fq 'MITM Lyrics Studio starting on Spotify' "$bootstrap_strings"
+          grep -Fq 'standalone hooks ready on attempt' "$bootstrap_strings"
           for file in index.html app.js editor-state.js renderer.js style.css icons.js repository-source.js tokens.css; do
             test -f "$bundle/ShareEditor/$file"
           done

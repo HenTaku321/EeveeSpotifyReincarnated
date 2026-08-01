@@ -89,6 +89,8 @@ test("standalone workflow emits a TrollFools archive without Eevee payloads", ()
   assert.match(workflow, /Orion\.framework/);
   assert.match(workflow, /MITMLyricsStudio-trollfools\.zip/);
   assert.match(workflow, /verify-standalone-editor\.sh/);
+  assert.match(workflow, /MITM Lyrics Studio starting on Spotify/);
+  assert.match(workflow, /standalone hooks ready on attempt/);
   assert.doesNotMatch(workflow, /EeveeSpotify\.dylib/);
   assert.match(workflow, /if any\("Eevee" in name for name in names\)/);
   assert.doesNotMatch(workflow, /EeveeSwiftProtobuf/);
