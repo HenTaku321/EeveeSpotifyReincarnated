@@ -55,6 +55,21 @@ test("polling reads the captured stateful player instead of extrapolating observ
   assert.doesNotMatch(bridge, /playbackSpeed/);
 });
 
+test("snapshot and seek fail closed instead of controlling a stale observer player", () => {
+  const controlPlayer = bridge.slice(
+    bridge.indexOf("private func controlPlayer()"),
+    bridge.indexOf("private func statefulControlPlayer()"),
+  );
+  const currentTrackID = bridge.slice(
+    bridge.indexOf("private func currentTrackID()"),
+    bridge.indexOf("private func isTrackID"),
+  );
+
+  assert.match(controlPlayer, /statefulControlPlayer\(\)/);
+  assert.doesNotMatch(controlPlayer, /observedPlayer/);
+  assert.doesNotMatch(currentTrackID, /return .*trackId/);
+});
+
 test("state machine explicitly handles manual jumps, pending seek, cooldown, and disabled rules", () => {
   assert.match(skipper, /manualSeekThresholdMs/);
   assert.match(skipper, /pendingSeek/);

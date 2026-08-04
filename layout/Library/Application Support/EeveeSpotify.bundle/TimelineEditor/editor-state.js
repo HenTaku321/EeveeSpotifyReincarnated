@@ -436,7 +436,7 @@
     if (!selectedModel) throw new Error("请选择翻译模型");
     return {
       track: clone(state.document.track),
-      lyrics: clone(state.document.lyrics),
+      lyrics: toSavePayload(state).lyrics,
       model: selectedModel,
     };
   }

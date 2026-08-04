@@ -44,7 +44,6 @@ final class LyricsTimelinePlayerBridge {
     private var durationMs = 0
     private var seekSelector: Selector?
     private var capturedTrack: LyricsShareEditorTrackCandidate?
-    private weak var observedPlayer: AnyObject?
 
     private init() {}
 
@@ -66,7 +65,6 @@ final class LyricsTimelinePlayerBridge {
             ?? false
 
         lock.lock()
-        observedPlayer = player
         if !resolvedTrackID.isEmpty {
             trackId = resolvedTrackID
             capturedTrack = resolvedTrack
@@ -118,7 +116,7 @@ final class LyricsTimelinePlayerBridge {
         let livePosition = resolvedDuration > 0 ? min(resolvedPosition, resolvedDuration) : resolvedPosition
         let liveTrackID = currentTrackID()
         let hasLiveTrack = !liveTrackID.isEmpty
-        let trackId = hasLiveTrack ? liveTrackID : (control == nil ? self.trackId : "")
+        let trackId = hasLiveTrack ? liveTrackID : ""
         if !trackId.isEmpty { self.trackId = trackId }
         // Observer callbacks can be missing or stale after a pause transition. Only expose a
         // playing clock when the verified stateful player can be polled directly.
@@ -341,7 +339,7 @@ final class LyricsTimelinePlayerBridge {
     }
 
     private func controlPlayer() -> AnyObject? {
-        statefulControlPlayer() ?? observedPlayer
+        statefulControlPlayer()
     }
 
     private func statefulControlPlayer() -> AnyObject? {
@@ -353,7 +351,7 @@ final class LyricsTimelinePlayerBridge {
     private func currentTrackID() -> String {
         let value = statefulPlayer?.currentTrack()?.trackIdentifier.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if isTrackID(value) { return value }
-        return observedPlayer == nil ? "" : trackId
+        return ""
     }
 
     private func isTrackID(_ value: String) -> Bool {

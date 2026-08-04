@@ -183,8 +183,10 @@ grep -Fq 'func capturedTrackCandidate() -> LyricsShareEditorTrackCandidate?' "$s
 grep -Fq 'LyricsTimelinePlayerBridge.shared.capturedTrackCandidate()' "$source_dir/LyricsShareEditorDocument.swift"
 grep -Fq 'safeRead(trackURI, key: "spt_trackIdentifier")' "$source_dir/LyricsTimelinePlayerBridge.swift"
 grep -Fq 'trackURI.map { String(describing: $0) }' "$source_dir/LyricsTimelinePlayerBridge.swift"
-grep -Fq 'private weak var observedPlayer: AnyObject?' "$source_dir/LyricsTimelinePlayerBridge.swift"
-grep -Fq 'return observedPlayer' "$source_dir/LyricsTimelinePlayerBridge.swift"
+if grep -Fq 'observedPlayer' "$source_dir/LyricsTimelinePlayerBridge.swift"; then
+    echo "timeline controls must not fall back to a stale observer player" >&2
+    exit 1
+fi
 grep -Fq 'let resolvedDuration = directDuration ?? durationMs' "$source_dir/LyricsTimelinePlayerBridge.swift"
 grep -Fq 'private func optionalNumber(' "$source_dir/LyricsTimelinePlayerBridge.swift"
 grep -Fq 'let directPlayer = statefulControlPlayer()' "$source_dir/LyricsTimelinePlayerBridge.swift"

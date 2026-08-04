@@ -33,3 +33,30 @@ test("native conflict callback includes the server document for explicit user re
   assert.match(controller, /if let document = serverObject\?\["document"\] as\? \[String: Any\]/);
   assert.match(controller, /error\["document"\] = document/);
 });
+
+test("native commands cannot cancel an in-flight lyrics save", () => {
+  const controller = read("LyricsTimelineEditorViewController.swift");
+  const perform = controller.slice(
+    controller.indexOf("private func perform(request:"),
+    controller.indexOf("private func sendSaveResult"),
+  );
+
+  assert.match(controller, /private var requestTasks: \[UUID: URLSessionDataTask\] = \[:\]/);
+  assert.match(controller, /private var requestSessions: \[UUID: URLSession\] = \[:\]/);
+  assert.match(controller, /private var requestDelegates: \[UUID: LyricsShareEditorSessionDelegate\] = \[:\]/);
+  assert.match(perform, /requestTasks\[id\] = task/);
+  assert.match(perform, /requestSessions\.removeValue\(forKey: id\)/);
+  assert.doesNotMatch(perform, /requestTask\?\.cancel\(\)|requestSession\?\.invalidateAndCancel\(\)/);
+});
+
+test("a successful lyrics save requires a fresh valid semantic hash", () => {
+  const controller = read("LyricsTimelineEditorViewController.swift");
+  const finishSave = controller.slice(
+    controller.indexOf("private func finishSave"),
+    controller.indexOf("private func perform(request:"),
+  );
+
+  assert.match(finishSave, /guard let rawHash = object\?\["hash"\] as\? String,/);
+  assert.match(finishSave, /Self\.isHash\(rawHash\)/);
+  assert.doesNotMatch(finishSave, /\?\? activeHash/);
+});

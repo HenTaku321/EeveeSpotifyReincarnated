@@ -32,10 +32,9 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
     private var activeTrack: LyricsShareEditorTrack?
     private var activeHash = ""
     private var activeConfiguration: LyricsShareEditorConfiguration?
-    private var requestTask: URLSessionDataTask?
-    private var requestSession: URLSession?
-    private var requestDelegate: LyricsShareEditorSessionDelegate?
-    private var requestID: UUID?
+    private var requestTasks: [UUID: URLSessionDataTask] = [:]
+    private var requestSessions: [UUID: URLSession] = [:]
+    private var requestDelegates: [UUID: LyricsShareEditorSessionDelegate] = [:]
     private var playerTimer: Timer?
     private var editorReady = false
     private var saveInFlight = false
@@ -646,7 +645,21 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
             }
             return
         }
-        let hash = (object?["hash"] as? String).flatMap { Self.isHash($0) ? $0.lowercased() : nil } ?? activeHash
+        guard let rawHash = object?["hash"] as? String,
+              Self.isHash(rawHash) else {
+            if let requestID = commandRequestID {
+                sendCommandFailure(
+                    requestID: requestID,
+                    status: http.statusCode,
+                    reason: "invalid-response",
+                    detail: "歌词服务的成功响应缺少有效的新 hash。"
+                )
+            } else {
+                sendSaveResult(ok: false, reason: "invalid-response", hash: nil)
+            }
+            return
+        }
+        let hash = rawHash.lowercased()
         activeHash = hash
         if let requestID = commandRequestID, var payload = object {
             payload["hash"] = hash
@@ -657,27 +670,24 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
     }
 
     private func perform(request: URLRequest, completion: @escaping (Data, URLResponse?, Error?) -> Void) {
-        requestTask?.cancel()
-        requestSession?.invalidateAndCancel()
         let id = UUID()
-        requestID = id
         let delegate = LyricsShareEditorSessionDelegate(maximumBytes: Self.maximumDocumentBytes) {
             [weak self] data, response, error in
             DispatchQueue.main.async {
-                guard let self = self, self.requestID == id else { return }
-                self.requestID = nil
-                self.requestTask = nil
-                self.requestSession?.finishTasksAndInvalidate()
-                self.requestSession = nil
-                self.requestDelegate = nil
+                guard let self = self,
+                      self.requestTasks.removeValue(forKey: id) != nil else { return }
+                let session = self.requestSessions.removeValue(forKey: id)
+                self.requestDelegates.removeValue(forKey: id)
+                session?.finishTasksAndInvalidate()
                 completion(data, response, error)
             }
         }
         let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
-        requestDelegate = delegate
-        requestSession = session
-        requestTask = session.dataTask(with: request)
-        requestTask?.resume()
+        let task = session.dataTask(with: request)
+        requestDelegates[id] = delegate
+        requestSessions[id] = session
+        requestTasks[id] = task
+        task.resume()
     }
 
     private func sendSaveResult(ok: Bool, reason: String?, hash: String?) {
@@ -943,12 +953,11 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
         released = true
         playerTimer?.invalidate()
         playerTimer = nil
-        requestTask?.cancel()
-        requestSession?.invalidateAndCancel()
-        requestTask = nil
-        requestSession = nil
-        requestDelegate = nil
-        requestID = nil
+        requestTasks.values.forEach { $0.cancel() }
+        requestSessions.values.forEach { $0.invalidateAndCancel() }
+        requestTasks.removeAll()
+        requestSessions.removeAll()
+        requestDelegates.removeAll()
         pendingSaveCommandRequestID = nil
         closeAttemptID = nil
         bridge.delegate = nil
