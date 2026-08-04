@@ -473,21 +473,81 @@
     const container = $("#retranslate-comparison");
     container.replaceChildren();
     if (!editorState || !retranslationCandidate) return;
-    State.retranslationComparison(editorState, retranslationCandidate).forEach((item) => {
+    const comparison = State.retranslationComparison(editorState, retranslationCandidate);
+    const changedCount = comparison.filter((item) => item.changed).length;
+    const summary = document.createElement("div");
+    summary.className = "retranslate-diff-summary";
+    summary.textContent = `${changedCount} 行修改 · ${comparison.length - changedCount} 行未变`;
+    container.append(summary);
+    comparison.forEach((item) => {
       const row = document.createElement("article");
-      row.className = `retranslate-compare-row${item.changed ? " is-changed" : ""}`;
-      for (const [label, line] of [["当前", item.current], ["候选", item.candidate]]) {
-        const side = document.createElement("div");
-        side.className = "retranslate-compare-side";
-        const heading = document.createElement("h4");
-        heading.textContent = `${String(item.index + 1).padStart(2, "0")} · ${label}`;
-        const base = document.createElement("p");
-        base.textContent = line.base || "（空行）";
-        const translation = document.createElement("small");
-        translation.textContent = line.translation;
-        side.append(heading, base, translation);
-        row.append(side);
+      row.className = `retranslate-diff-row${item.changed ? " is-changed" : ""}`;
+
+      const heading = document.createElement("header");
+      heading.className = "retranslate-diff-row-heading";
+      const lineNumber = document.createElement("span");
+      lineNumber.className = "retranslate-diff-line-number";
+      lineNumber.textContent = `第 ${String(item.index + 1).padStart(2, "0")} 行`;
+      const state = document.createElement("span");
+      state.className = "retranslate-diff-state";
+      state.textContent = item.changed ? "已修改" : "未变化";
+      heading.append(lineNumber, state);
+
+      const source = document.createElement("div");
+      source.className = "retranslate-diff-source";
+      const sourceMarker = document.createElement("span");
+      sourceMarker.className = "retranslate-diff-marker";
+      sourceMarker.textContent = " ";
+      sourceMarker.setAttribute("aria-hidden", "true");
+      const sourceCopy = document.createElement("div");
+      const sourceLabel = document.createElement("small");
+      sourceLabel.textContent = "原文";
+      const sourceText = document.createElement("p");
+      sourceText.className = "retranslate-diff-source-text";
+      sourceText.textContent = item.candidate.base || "（空行）";
+      sourceCopy.append(sourceLabel, sourceText);
+      source.append(sourceMarker, sourceCopy);
+
+      const translations = document.createElement("div");
+      translations.className = "retranslate-diff-translations";
+      if (item.changed) {
+        for (const [tagName, className, marker, label, text] of [
+          ["del", "retranslate-diff-before", "−", "当前译文", item.current.translation],
+          ["ins", "retranslate-diff-after", "+", "候选译文", item.candidate.translation],
+        ]) {
+          const change = document.createElement(tagName);
+          change.className = className;
+          const changeMarker = document.createElement("span");
+          changeMarker.className = "retranslate-diff-marker";
+          changeMarker.textContent = marker;
+          changeMarker.setAttribute("aria-hidden", "true");
+          const copy = document.createElement("div");
+          const changeLabel = document.createElement("small");
+          changeLabel.textContent = label;
+          const changeText = document.createElement("p");
+          changeText.className = `${className}-text`;
+          changeText.textContent = text || "（无译文）";
+          copy.append(changeLabel, changeText);
+          change.append(changeMarker, copy);
+          translations.append(change);
+        }
+      } else {
+        const unchanged = document.createElement("div");
+        unchanged.className = "retranslate-diff-unchanged";
+        const marker = document.createElement("span");
+        marker.className = "retranslate-diff-marker";
+        marker.textContent = "=";
+        marker.setAttribute("aria-hidden", "true");
+        const copy = document.createElement("div");
+        const label = document.createElement("small");
+        label.textContent = "译文未变化";
+        const text = document.createElement("p");
+        text.textContent = item.candidate.translation || "（无译文）";
+        copy.append(label, text);
+        unchanged.append(marker, copy);
+        translations.append(unchanged);
       }
+      row.append(heading, source, translations);
       container.append(row);
     });
   }

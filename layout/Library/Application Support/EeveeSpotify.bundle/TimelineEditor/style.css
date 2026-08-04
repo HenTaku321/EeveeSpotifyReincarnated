@@ -741,60 +741,139 @@ button:focus-visible {
 
 .retranslate-comparison {
   display: grid;
-  gap: var(--s-2);
+  gap: var(--s-3);
 }
 
-.retranslate-compare-row {
+.retranslate-diff-summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--control-h-sm);
+  padding: 0 var(--s-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.retranslate-diff-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   border: 1px solid var(--hairline);
   border-radius: var(--r-md);
   background: var(--surface-2);
   overflow: hidden;
 }
 
-.retranslate-compare-row.is-changed {
+.retranslate-diff-row.is-changed {
   border-color: var(--hairline-strong);
 }
 
-.retranslate-compare-side {
+.retranslate-diff-row-heading {
   min-width: 0;
-  padding: var(--s-3);
-}
-
-.retranslate-compare-side + .retranslate-compare-side {
-  border-left: 1px solid var(--hairline);
-  background: var(--surface-3);
-}
-
-.retranslate-compare-side h4 {
-  margin: 0 0 var(--s-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--hairline);
   color: var(--text-subtle);
   font-size: var(--fs-xs);
-  font-weight: var(--fw-medium);
   font-variant-numeric: tabular-nums;
 }
 
-.retranslate-compare-side p,
-.retranslate-compare-side small {
-  display: block;
+.retranslate-diff-state {
+  color: var(--text-muted);
+  font-weight: var(--fw-medium);
+}
+
+.retranslate-diff-row.is-changed .retranslate-diff-state {
+  color: var(--text);
+}
+
+.retranslate-diff-source,
+.retranslate-diff-before,
+.retranslate-diff-after,
+.retranslate-diff-unchanged {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  padding: var(--s-3);
+}
+
+.retranslate-diff-source {
+  border-bottom: 1px solid var(--hairline);
+}
+
+.retranslate-diff-translations {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.retranslate-diff-before {
+  border-right: 1px solid var(--hairline);
+  background: var(--danger-soft);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.retranslate-diff-after {
+  border-left: 3px solid var(--accent);
+  background: var(--surface-3);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.retranslate-diff-unchanged {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+}
+
+.retranslate-diff-marker {
+  color: var(--text-subtle);
+  font-weight: var(--fw-bold);
+  line-height: var(--lh-base);
+  text-align: center;
+}
+
+.retranslate-diff-before .retranslate-diff-marker {
+  color: var(--danger);
+}
+
+.retranslate-diff-after .retranslate-diff-marker {
+  color: var(--accent);
+}
+
+.retranslate-diff-source p,
+.retranslate-diff-before p,
+.retranslate-diff-after p,
+.retranslate-diff-unchanged p,
+.retranslate-diff-source small,
+.retranslate-diff-before small,
+.retranslate-diff-after small,
+.retranslate-diff-unchanged small {
   margin: 0;
   overflow-wrap: anywhere;
 }
 
-.retranslate-compare-side p {
+.retranslate-diff-source p,
+.retranslate-diff-before p,
+.retranslate-diff-after p,
+.retranslate-diff-unchanged p {
   line-height: var(--lh-base);
 }
 
-.retranslate-compare-side small {
-  margin-top: var(--s-1);
+.retranslate-diff-source small,
+.retranslate-diff-before small,
+.retranslate-diff-after small,
+.retranslate-diff-unchanged small {
+  display: block;
+  margin-bottom: var(--s-1);
   color: var(--text-muted);
   font-size: var(--fs-sm);
-}
-
-.retranslate-compare-side small:empty {
-  display: none;
 }
 
 .retranslate-status {
@@ -1174,13 +1253,17 @@ input:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .retranslate-compare-row {
+  .retranslate-diff-translations {
     grid-template-columns: 1fr;
   }
 
-  .retranslate-compare-side + .retranslate-compare-side {
+  .retranslate-diff-before {
+    border-right: 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .retranslate-diff-after {
     border-top: 1px solid var(--hairline);
-    border-left: 0;
   }
 
   .retranslate-actions {

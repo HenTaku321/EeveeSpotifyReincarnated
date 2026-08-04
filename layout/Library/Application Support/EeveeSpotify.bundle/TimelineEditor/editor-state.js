@@ -434,9 +434,17 @@
     }
     const selectedModel = asText(model).trim();
     if (!selectedModel) throw new Error("请选择翻译模型");
+    const lyrics = toSavePayload(state).lyrics;
+    lyrics.lyrics.lines = lyrics.lyrics.lines.map((line) => {
+      const source = clone(line);
+      const parts = splitTranslation(source.words);
+      if (parts.translation) source.words = parts.base;
+      return source;
+    });
+    lyrics.lyrics.previewLines = lyrics.lyrics.lines.slice(0, 4).map((line) => clone(line));
     return {
       track: clone(state.document.track),
-      lyrics: toSavePayload(state).lyrics,
+      lyrics,
       model: selectedModel,
     };
   }
@@ -458,6 +466,16 @@
         || JSON.stringify(normalizeSyllables(candidateLine.syllables)) !== JSON.stringify(normalizeSyllables(currentLine.syllables))) {
         throw new Error(`重译候选第 ${index + 1} 行修改了时间信息`);
       }
+      const candidateParts = splitTranslation(candidateLine.words);
+      if (candidateParts.translation && candidateParts.base === asText(currentLine.words).replace(/\s+$/, "")) {
+        const currentParts = splitTranslation(currentLine.words);
+        candidateLine.words = buildWords(currentParts.base, candidateParts.translation, candidateLine.words);
+      }
+    });
+    validated.lyrics.lyrics.previewLines = candidateLines.slice(0, 4).map((line) => {
+      const preview = clone(line);
+      delete preview.allowEmptyWords;
+      return preview;
     });
     const model = asText(payload?.model).trim();
     const provider = asText(payload?.provider).trim();
@@ -480,7 +498,7 @@
       const next = splitTranslation(candidateLine.words);
       return {
         index,
-        changed: asText(line.words) !== asText(candidateLine.words),
+        changed: current.base !== next.base || current.translation !== next.translation,
         current: { base: current.base, translation: current.translation },
         candidate: { base: next.base, translation: next.translation },
       };
