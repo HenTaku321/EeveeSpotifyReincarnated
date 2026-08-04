@@ -28,6 +28,13 @@ struct LyricsTimelinePlayerSnapshot {
     }
 }
 
+struct LyricsPlaybackEvent {
+    let trackId: String
+    let positionMs: Int
+    let durationMs: Int
+    let isPlaying: Bool
+}
+
 final class LyricsTimelinePlayerBridge {
     static let shared = LyricsTimelinePlayerBridge()
 
@@ -41,12 +48,22 @@ final class LyricsTimelinePlayerBridge {
 
     private init() {}
 
-    func capture(player: AnyObject, state: AnyObject) {
+    @discardableResult
+    func capture(player: AnyObject, state: AnyObject) -> LyricsPlaybackEvent {
         let positionRaw = number(state, key: "position")
         let durationRaw = number(state, key: "duration")
         let hasStateTrack = safeRead(state, key: "track") != nil
         let resolvedTrackID = resolveTrackID(state: state)
         let resolvedTrack = resolveTrackCandidate(state: state, trackID: resolvedTrackID)
+        let stateTrackID = resolveStateMusicTrackID(state: state)
+        let eventDurationMs = normalizeStateMilliseconds(durationRaw, durationHint: durationRaw)
+        let eventPositionMs = min(
+            normalizeStateMilliseconds(positionRaw, durationHint: durationRaw),
+            eventDurationMs > 0 ? eventDurationMs : Int.max
+        )
+        let eventIsPlaying = optionalBool(state, key: "isPlaying")
+            ?? optionalBool(state, key: "isPaused").map { !$0 }
+            ?? false
 
         lock.lock()
         observedPlayer = player
@@ -62,6 +79,12 @@ final class LyricsTimelinePlayerBridge {
         let normalizedPosition = max(0, secondsToMilliseconds(positionRaw))
         positionMs = durationMs > 0 ? min(normalizedPosition, durationMs) : normalizedPosition
         lock.unlock()
+        return LyricsPlaybackEvent(
+            trackId: stateTrackID,
+            positionMs: max(0, eventPositionMs),
+            durationMs: max(0, eventDurationMs),
+            isPlaying: eventIsPlaying
+        )
     }
 
     func capturedTrackCandidate() -> LyricsShareEditorTrackCandidate? {
@@ -236,6 +259,27 @@ final class LyricsTimelinePlayerBridge {
         return ""
     }
 
+    private func resolveStateMusicTrackID(state: AnyObject) -> String {
+        guard let stateTrack = safeRead(state, key: "track") as AnyObject?,
+              let trackURI = safeRead(stateTrack, key: "URI") as AnyObject? else { return "" }
+        if let identifier = safeRead(trackURI, key: "spt_trackIdentifier") as? String {
+            let value = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+            if isTrackID(value) { return value }
+        }
+        let uri: String
+        if let value = trackURI as? String {
+            uri = value
+        } else if let value = trackURI as? URL {
+            uri = value.absoluteString
+        } else {
+            uri = String(describing: trackURI)
+        }
+        let prefix = "spotify:track:"
+        guard uri.hasPrefix(prefix) else { return "" }
+        let identifier = String(uri.dropFirst(prefix.count))
+        return isTrackID(identifier) ? identifier : ""
+    }
+
     private func resolveTrackCandidate(state: AnyObject, trackID: String) -> LyricsShareEditorTrackCandidate? {
         guard !trackID.isEmpty,
               let stateTrack = safeRead(state, key: "track") as AnyObject? else { return nil }
@@ -324,5 +368,11 @@ final class LyricsTimelinePlayerBridge {
         guard raw.isFinite, raw >= 0 else { return 0 }
         let value = raw * 1000
         return value.isFinite ? Int(min(value.rounded(), Double(Int.max))) : 0
+    }
+
+    private func normalizeStateMilliseconds(_ raw: Double, durationHint: Double) -> Int {
+        guard raw.isFinite, raw >= 0 else { return 0 }
+        let milliseconds = raw > 10_000 || durationHint > 10_000 ? raw : raw * 1000
+        return milliseconds.isFinite ? Int(min(milliseconds.rounded(), Double(Int.max))) : 0
     }
 }

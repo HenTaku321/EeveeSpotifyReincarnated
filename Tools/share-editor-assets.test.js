@@ -189,6 +189,7 @@ test("timeline keeps translations combined in words and alternatives opaque", ()
     base: "Second line",
     translation: "",
     syllables: [],
+    allowEmptyWords: false,
   });
 
   TimelineState.applyLine(state, 1, { base: "Changed original", translation: "修改后的译文" });
@@ -217,4 +218,21 @@ test("native timeline draft validation accepts the current web draft version", (
   assert.ok(match, "the native draft contract must expose one explicit version");
   assert.equal(Number(match[1]), TimelineState.VERSION);
   assert.match(controller, /\(object\["version"\] as\? NSNumber\)\?\.intValue == Self\.draftVersion/);
+});
+
+test("native timeline bridge serves model, translation, validation, and awaited CAS commands", () => {
+  const controller = readSource("LyricsTimelineEditorViewController.swift");
+  const configuration = readSource("LyricsShareEditorConfiguration.swift");
+
+  for (const command of ["models", "translate", "validateCanonical", "save"]) {
+    assert.match(controller, new RegExp(`case "${command}"`));
+  }
+  assert.match(controller, /let requestID = message\["requestId"\] as\? String/);
+  assert.match(controller, /sendCommandResult\(requestID:/);
+  assert.match(controller, /X-MITM-Lyrics-Token/);
+  assert.match(controller, /upstreamStatus/);
+  assert.match(controller, /missingFields/);
+  assert.match(configuration, /translationModelsEndpointURL/);
+  assert.match(configuration, /shareEditorTranslateEndpointURL/);
+  assert.match(configuration, /shareEditorValidateEndpointURL/);
 });

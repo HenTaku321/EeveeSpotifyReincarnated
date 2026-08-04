@@ -38,6 +38,11 @@
         <button class="cue-button" id="cue-end" type="button" title="快捷键 E（打点开启时）">写入 end</button>
         <button class="ghost-button" id="play-line" type="button" title="快捷键 Q">播放当前行</button>
       </div>
+      <div class="cue-shortcuts" id="cue-shortcuts" data-enabled="false" aria-label="打点快捷键">
+        <span class="cue-shortcut"><kbd>W</kbd><span id="cue-shortcut-w-label">start + 下一行</span></span>
+        <span class="cue-shortcut"><kbd>E</kbd><span id="cue-shortcut-e-label">end + 下一行</span></span>
+        <span class="cue-shortcut"><kbd>Shift</kbd> + <kbd>W</kbd><span id="cue-shortcut-back-label">上一行</span></span>
+      </div>
       <div class="mode-row">
         <div class="segmented" role="group" aria-label="同步模式">
           <button type="button" data-mode="UNSYNCED">无同步</button>
@@ -76,6 +81,11 @@
       <div class="lines-panel" id="lines-panel">
         <div class="panel-heading">
           <h2>整首歌词 · <span id="line-count">0 行</span></h2>
+          <div class="lines-heading-actions">
+            <button class="ghost-button" id="segments-button" type="button"><span class="icon-slot icon-sm" data-icon="clock"></span><span>片段跳过</span></button>
+            <button class="ghost-button" id="retranslate-button" type="button"><span class="icon-slot icon-sm" data-icon="lyrics"></span><span>整首重译</span></button>
+            <button class="ghost-button lrc-import-button" id="lrc-import-button" type="button"><span class="icon-slot icon-sm" data-icon="arrowUp"></span><span>导入 LRC</span></button>
+          </div>
         </div>
         <div class="lines-list" id="lines-list"></div>
       </div>
@@ -94,6 +104,84 @@
       </div>
     </nav>
   </main>
+
+  <dialog class="lrc-dialog" id="lrc-import-dialog" aria-labelledby="lrc-import-title">
+    <form class="lrc-dialog-shell" method="dialog">
+      <header class="lrc-dialog-header">
+        <h2 id="lrc-import-title">导入 LRC</h2>
+        <button class="icon-button" id="lrc-import-close" type="submit" value="cancel" aria-label="关闭" title="关闭"><span class="icon-slot" data-icon="close"></span></button>
+      </header>
+      <div class="lrc-dialog-body">
+        <label class="lrc-import-field"><span class="field-label">LRC 文本</span><textarea id="lrc-import-input" rows="12" spellcheck="false" placeholder="[00:22.50]Hence the burden of flesh becomes resolved"></textarea></label>
+        <p class="lrc-import-metadata" id="lrc-import-metadata" hidden></p>
+        <output class="lrc-import-summary" id="lrc-import-summary" aria-live="polite">等待粘贴</output>
+        <ul class="lrc-import-errors" id="lrc-import-errors" aria-live="polite" hidden></ul>
+      </div>
+      <footer class="lrc-dialog-actions">
+        <button class="ghost-button" id="lrc-import-cancel" type="submit" value="cancel">取消</button>
+        <button class="cue-button" id="lrc-import-confirm" type="button" disabled>替换歌词</button>
+        <button id="lrc-import-translate" type="button" disabled>提交翻译并替换歌词</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="lrc-dialog retranslate-dialog" id="retranslate-dialog" aria-labelledby="retranslate-title">
+    <form class="lrc-dialog-shell" method="dialog">
+      <header class="lrc-dialog-header retranslate-header">
+        <div>
+          <h2 id="retranslate-title">整首重新翻译</h2>
+          <span class="static-badge" id="retranslate-static-badge">读取状态中</span>
+        </div>
+        <button class="icon-button" id="retranslate-close" type="submit" value="cancel" aria-label="关闭" title="关闭"><span class="icon-slot" data-icon="close"></span></button>
+      </header>
+      <div class="lrc-dialog-body retranslate-body">
+        <section id="retranslate-picker" aria-labelledby="retranslate-models-title">
+          <div class="retranslate-section-heading">
+            <h3 id="retranslate-models-title">选择翻译模型</h3>
+          </div>
+          <div class="retranslate-models" id="retranslate-models" role="radiogroup" aria-label="翻译模型"></div>
+        </section>
+        <section id="retranslate-review" hidden aria-labelledby="retranslate-review-title">
+          <div class="retranslate-section-heading">
+            <h3 id="retranslate-review-title">逐行对照</h3>
+            <span id="retranslate-provenance"></span>
+          </div>
+          <div class="retranslate-comparison" id="retranslate-comparison"></div>
+        </section>
+        <output class="retranslate-status" id="retranslate-status" aria-live="polite"></output>
+      </div>
+      <footer class="lrc-dialog-actions retranslate-actions">
+        <button class="ghost-button" id="retranslate-cancel" type="submit" value="cancel">取消</button>
+        <button class="cue-button" id="retranslate-submit" type="button" disabled>生成候选</button>
+        <button class="ghost-button" id="retranslate-apply" type="button" hidden>应用</button>
+        <button id="retranslate-apply-static" type="button" hidden>应用并 static</button>
+      </footer>
+    </form>
+  </dialog>
+  <dialog class="lrc-dialog segment-dialog" id="segments-dialog" aria-labelledby="segments-title">
+    <form class="lrc-dialog-shell" method="dialog">
+      <header class="lrc-dialog-header segment-dialog-header">
+        <div>
+          <h2 id="segments-title">歌曲片段跳过</h2>
+          <span class="static-badge" id="segments-revision">尚未载入</span>
+        </div>
+        <button class="icon-button" id="segments-close" type="submit" value="cancel" aria-label="关闭" title="关闭"><span class="icon-slot" data-icon="close"></span></button>
+      </header>
+      <div class="lrc-dialog-body segment-dialog-body">
+        <div class="segment-toolbar">
+          <span id="segments-count">0 个片段</span>
+          <button class="ghost-button" id="segment-add" type="button"><span class="icon-slot icon-sm" data-icon="plus"></span><span>新增片段</span></button>
+        </div>
+        <div class="segment-list" id="segments-list"></div>
+        <output class="retranslate-status" id="segments-status" aria-live="polite"></output>
+      </div>
+      <footer class="lrc-dialog-actions segment-dialog-actions">
+        <button class="ghost-button" id="segments-cancel" type="submit" value="cancel">取消</button>
+        <button class="ghost-button" id="segments-load-conflict" type="button" hidden>载入服务端版本</button>
+        <button class="cue-button" id="segments-save" type="button" disabled>保存规则</button>
+      </footer>
+    </form>
+  </dialog>
   <script src="./icons.js"></script>
   <script src="./editor-state.js"></script>
   <script src="./browser-host.js"></script>

@@ -9,6 +9,14 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
         case unreadable
     }
 
+    private enum EditorCommandKind {
+        case models
+        case translate
+        case validateCanonical
+        case segmentsGet
+        case segmentsPut
+    }
+
     private static let maximumDocumentBytes = 8 * 1024 * 1024
     private static let maximumDraftBytes = 8 * 1024 * 1024
     private static let draftVersion = 2
@@ -31,6 +39,7 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
     private var playerTimer: Timer?
     private var editorReady = false
     private var saveInFlight = false
+    private var pendingSaveCommandRequestID: String?
     private var isClosing = false
     private var closeAttemptID: UUID?
     private var released = false
@@ -145,6 +154,7 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
               scriptMessage.webView === webView,
               let message = scriptMessage.body as? [String: Any],
               let command = message["command"] as? String else { return }
+        let requestID = message["requestId"] as? String
 
         switch command {
         case "getPlayerState":
@@ -176,8 +186,29 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
             guard let serialized = message["serialized"] as? String else { return }
             persistDraft(serialized, completion: nil)
         case "save":
-            guard !saveInFlight, let payload = message["payload"] as? [String: Any] else { return }
-            save(payload: payload)
+            guard let payload = message["payload"] as? [String: Any] else {
+                sendCommandFailure(requestID: requestID, status: 0, reason: "bad-command", detail: "保存请求缺少 payload。")
+                return
+            }
+            guard !saveInFlight else {
+                sendCommandFailure(requestID: requestID, status: 0, reason: "save-in-flight", detail: "已有歌词正在保存。")
+                return
+            }
+            save(payload: payload, commandRequestID: requestID)
+        case "models":
+            performEditorCommand(requestID: requestID, kind: .models, payload: nil)
+        case "translate":
+            performEditorCommand(requestID: requestID, kind: .translate, payload: message["payload"] as? [String: Any])
+        case "validateCanonical":
+            performEditorCommand(requestID: requestID, kind: .validateCanonical, payload: message["payload"] as? [String: Any])
+        case "segmentsGet":
+            guard let trackID = message["trackId"] as? String else {
+                sendCommandFailure(requestID: requestID, status: 0, reason: "bad-command", detail: "片段规则请求缺少 trackId。")
+                return
+            }
+            performEditorCommand(requestID: requestID, kind: .segmentsGet, payload: ["trackId": trackID])
+        case "segmentsPut":
+            performEditorCommand(requestID: requestID, kind: .segmentsPut, payload: message["payload"] as? [String: Any])
         default:
             break
         }
@@ -401,8 +432,151 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
         }
     }
 
-    private func save(payload: [String: Any]) {
-        guard let track = activeTrack, let configuration = activeConfiguration else { return }
+    private func performEditorCommand(requestID rawRequestID: String?, kind: EditorCommandKind,
+                                      payload: [String: Any]?) {
+        guard let requestID = validatedCommandRequestID(rawRequestID) else { return }
+        guard editorReady, let track = activeTrack, let configuration = activeConfiguration else {
+            sendCommandFailure(
+                requestID: requestID,
+                status: 0,
+                reason: "editor-not-ready",
+                detail: "歌词编辑器尚未完成当前曲目载入。"
+            )
+            return
+        }
+
+        let endpoint: URL
+        let method: String
+        let timeout: TimeInterval
+        switch kind {
+        case .models:
+            endpoint = configuration.translationModelsEndpointURL
+            method = "GET"
+            timeout = 15
+        case .translate:
+            endpoint = configuration.shareEditorTranslateEndpointURL
+            method = "POST"
+            timeout = 190
+        case .validateCanonical:
+            endpoint = configuration.shareEditorValidateEndpointURL
+            method = "POST"
+            timeout = 15
+        case .segmentsGet:
+            endpoint = configuration.segmentsEndpointURL
+            method = "GET"
+            timeout = 15
+        case .segmentsPut:
+            endpoint = configuration.segmentsEndpointURL
+            method = "PUT"
+            timeout = 15
+        }
+
+        do {
+            let requestURL: URL
+            if case .segmentsGet = kind {
+                guard payload?["trackId"] as? String == track.trackId,
+                      var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
+                    throw LyricsShareEditorError.invalidResponse("片段规则请求的曲目与当前文档不一致。")
+                }
+                components.queryItems = [URLQueryItem(name: "trackId", value: track.trackId)]
+                guard let resolvedURL = components.url else {
+                    throw LyricsShareEditorError.invalidResponse("无法生成片段规则请求地址。")
+                }
+                requestURL = resolvedURL
+            } else {
+                requestURL = endpoint
+            }
+            var request = URLRequest(url: requestURL)
+            request.httpMethod = method
+            request.timeoutInterval = timeout
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            if !configuration.token.isEmpty {
+                request.setValue(configuration.token, forHTTPHeaderField: "X-MITM-Lyrics-Token")
+            }
+            if method != "GET" {
+                guard let payload = payload else {
+                    throw LyricsShareEditorError.invalidResponse("命令缺少 payload。")
+                }
+                if case .segmentsPut = kind {
+                    guard payload["trackId"] as? String == track.trackId else {
+                        throw LyricsShareEditorError.invalidResponse("片段规则请求的曲目与当前文档不一致。")
+                    }
+                } else {
+                    guard let payloadTrack = payload["track"] as? [String: Any],
+                          matchesTrack(payloadTrack, track) else {
+                        throw LyricsShareEditorError.invalidResponse("命令 payload 的曲目与当前文档不一致。")
+                    }
+                }
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.httpBody = try Self.validatedJSONData(payload, maximumBytes: Self.maximumDocumentBytes)
+            }
+            perform(request: request) { [weak self] data, response, error in
+                self?.finishEditorCommand(
+                    requestID: requestID,
+                    data: data,
+                    response: response,
+                    error: error
+                )
+            }
+        } catch {
+            sendCommandFailure(
+                requestID: requestID,
+                status: 0,
+                reason: "bad-command",
+                detail: error.localizedDescription
+            )
+        }
+    }
+
+    private func finishEditorCommand(requestID: String, data: Data, response: URLResponse?, error: Error?) {
+        if let error = error {
+            let reason = (error as NSError).code == NSURLErrorTimedOut ? "timeout" : "network-error"
+            sendCommandFailure(
+                requestID: requestID,
+                status: 0,
+                reason: reason,
+                detail: error.localizedDescription
+            )
+            return
+        }
+        guard let http = response as? HTTPURLResponse else {
+            sendCommandFailure(requestID: requestID, status: 0, reason: "invalid-response", detail: nil)
+            return
+        }
+        guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            sendCommandFailure(
+                requestID: requestID,
+                status: http.statusCode,
+                reason: "invalid-response",
+                detail: "歌词服务返回了无效 JSON。"
+            )
+            return
+        }
+        guard (200..<300).contains(http.statusCode), object["ok"] as? Bool == true else {
+            sendCommandFailure(
+                requestID: requestID,
+                status: http.statusCode,
+                reason: object["reason"] as? String ?? "HTTP \(http.statusCode)",
+                detail: object["detail"] as? String,
+                serverObject: object
+            )
+            return
+        }
+        sendCommandResult(requestID: requestID, payload: object)
+    }
+
+    private func save(payload: [String: Any], commandRequestID: String? = nil) {
+        guard let track = activeTrack, let configuration = activeConfiguration else {
+            if let requestID = validatedCommandRequestID(commandRequestID) {
+                sendCommandFailure(
+                    requestID: requestID,
+                    status: 0,
+                    reason: "editor-not-ready",
+                    detail: "歌词编辑器尚未完成当前曲目载入。"
+                )
+            }
+            return
+        }
         do {
             guard editorReady,
                   let payloadTrack = payload["track"] as? [String: Any], matchesTrack(payloadTrack, track),
@@ -423,32 +597,63 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
             }
             request.httpBody = body
             saveInFlight = true
+            pendingSaveCommandRequestID = validatedCommandRequestID(commandRequestID)
             perform(request: request) { [weak self] data, response, error in
                 self?.finishSave(data: data, response: response, error: error)
             }
         } catch {
-            sendSaveResult(ok: false, reason: error.localizedDescription, hash: nil)
+            if let requestID = validatedCommandRequestID(commandRequestID) {
+                sendCommandFailure(requestID: requestID, status: 0, reason: "bad-command", detail: error.localizedDescription)
+            } else {
+                sendSaveResult(ok: false, reason: error.localizedDescription, hash: nil)
+            }
         }
     }
 
     private func finishSave(data: Data, response: URLResponse?, error: Error?) {
         saveInFlight = false
+        let commandRequestID = pendingSaveCommandRequestID
+        pendingSaveCommandRequestID = nil
         if let error = error {
-            sendSaveResult(ok: false, reason: error.localizedDescription, hash: nil)
+            if let requestID = commandRequestID {
+                let reason = (error as NSError).code == NSURLErrorTimedOut ? "timeout" : "network-error"
+                sendCommandFailure(requestID: requestID, status: 0, reason: reason, detail: error.localizedDescription)
+            } else {
+                sendSaveResult(ok: false, reason: error.localizedDescription, hash: nil)
+            }
             return
         }
         guard let http = response as? HTTPURLResponse else {
-            sendSaveResult(ok: false, reason: "invalid-response", hash: nil)
+            if let requestID = commandRequestID {
+                sendCommandFailure(requestID: requestID, status: 0, reason: "invalid-response", detail: nil)
+            } else {
+                sendSaveResult(ok: false, reason: "invalid-response", hash: nil)
+            }
             return
         }
         let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         guard (200..<300).contains(http.statusCode), object?["ok"] as? Bool == true else {
-            sendSaveResult(ok: false, reason: object?["reason"] as? String ?? "HTTP \(http.statusCode)", hash: nil)
+            if let requestID = commandRequestID {
+                sendCommandFailure(
+                    requestID: requestID,
+                    status: http.statusCode,
+                    reason: object?["reason"] as? String ?? "HTTP \(http.statusCode)",
+                    detail: object?["detail"] as? String,
+                    serverObject: object
+                )
+            } else {
+                sendSaveResult(ok: false, reason: object?["reason"] as? String ?? "HTTP \(http.statusCode)", hash: nil)
+            }
             return
         }
         let hash = (object?["hash"] as? String).flatMap { Self.isHash($0) ? $0.lowercased() : nil } ?? activeHash
         activeHash = hash
-        sendSaveResult(ok: true, reason: nil, hash: hash)
+        if let requestID = commandRequestID, var payload = object {
+            payload["hash"] = hash
+            sendCommandResult(requestID: requestID, payload: payload)
+        } else {
+            sendSaveResult(ok: true, reason: nil, hash: hash)
+        }
     }
 
     private func perform(request: URLRequest, completion: @escaping (Data, URLResponse?, Error?) -> Void) {
@@ -480,6 +685,58 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
         if let reason = reason { result["reason"] = reason }
         if let hash = hash { result["hash"] = hash }
         evaluate(function: "onSaveResult", object: result)
+    }
+
+    private func sendCommandResult(requestID: String, payload: [String: Any]) {
+        guard validatedCommandRequestID(requestID) != nil else { return }
+        evaluate(function: "onCommandResult", object: [
+            "requestId": requestID,
+            "ok": true,
+            "payload": payload
+        ])
+    }
+
+    private func sendCommandFailure(requestID rawRequestID: String?, status: Int, reason: String,
+                                    detail: String?, serverObject: [String: Any]? = nil) {
+        guard let requestID = validatedCommandRequestID(rawRequestID) else { return }
+        var error: [String: Any] = [
+            "reason": reason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "request-failed" : reason,
+            "status": max(0, status)
+        ]
+        if let detail = detail?.trimmingCharacters(in: .whitespacesAndNewlines), !detail.isEmpty {
+            error["detail"] = String(detail.prefix(512))
+        }
+        if let upstreamStatus = serverObject?["upstreamStatus"] as? NSNumber,
+           upstreamStatus.intValue > 0 {
+            error["upstreamStatus"] = upstreamStatus
+        }
+        if let missingFields = serverObject?["missingFields"] as? [String], !missingFields.isEmpty {
+            error["missingFields"] = missingFields.map { String($0.prefix(128)) }.prefix(32).map { $0 }
+        }
+        if let hash = serverObject?["hash"] as? String, Self.isHash(hash) {
+            error["hash"] = hash.lowercased()
+        }
+        if let document = serverObject?["document"] as? [String: Any] {
+            error["document"] = document
+        }
+        evaluate(function: "onCommandResult", object: [
+            "requestId": requestID,
+            "ok": false,
+            "error": error
+        ])
+    }
+
+    private func validatedCommandRequestID(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              value.utf8.count <= 160,
+              value.unicodeScalars.allSatisfy({ scalar in
+                  (scalar.value >= 48 && scalar.value <= 57)
+                      || (scalar.value >= 65 && scalar.value <= 90)
+                      || (scalar.value >= 97 && scalar.value <= 122)
+                      || scalar.value == 45
+              }) else { return nil }
+        return value
     }
 
     private func startPlayerUpdates() {
@@ -692,6 +949,7 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
         requestSession = nil
         requestDelegate = nil
         requestID = nil
+        pendingSaveCommandRequestID = nil
         closeAttemptID = nil
         bridge.delegate = nil
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "timelineEditor")

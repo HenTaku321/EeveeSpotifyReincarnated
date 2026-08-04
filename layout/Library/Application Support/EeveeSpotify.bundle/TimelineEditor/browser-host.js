@@ -8,6 +8,10 @@
 
   const LOAD_ENDPOINT = "/v1/share-editor/lyrics";
   const SAVE_ENDPOINT = "/v1/lyrics/edit";
+  const VALIDATE_CANONICAL_ENDPOINT = "/v1/share-editor/validate";
+  const TRANSLATE_ENDPOINT = "/v1/share-editor/translate";
+  const MODELS_ENDPOINT = "/v1/translation/models";
+  const SEGMENTS_ENDPOINT = "/v1/segments";
   const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 
   async function readJSON(response) {
@@ -16,7 +20,14 @@
     let payload;
     try { payload = JSON.parse(body); } catch (_) { throw new Error("歌词服务返回了无效 JSON"); }
     if (!response.ok || !payload || payload.ok !== true) {
-      const error = new Error(String(payload && (payload.reason || payload.error) || `歌词请求失败 (${response.status})`));
+      const reason = String(payload && (payload.reason || payload.error) || `歌词请求失败 (${response.status})`);
+      const missing = Array.isArray(payload?.missingFields) ? payload.missingFields.map(String).filter(Boolean) : [];
+      const details = [];
+      if (payload?.detail) details.push(String(payload.detail));
+      if (missing.length) details.push(`missing fields: ${missing.join(", ")}`);
+      if (Number(payload?.upstreamStatus) > 0) details.push(`upstream HTTP ${Number(payload.upstreamStatus)}`);
+      const detail = details.join("; ");
+      const error = new Error(detail ? `${reason}: ${detail}` : reason);
       error.status = Number(response.status || 0);
       error.payload = payload;
       throw error;
@@ -59,22 +70,41 @@
           });
           return null;
         }
+        if (command === "translate") {
+          return request(TRANSLATE_ENDPOINT, { method: "POST", body: JSON.stringify(message.payload || {}) });
+        }
+        if (command === "models") {
+          return request(MODELS_ENDPOINT, { method: "GET" });
+        }
+        if (command === "validateCanonical") {
+          return request(VALIDATE_CANONICAL_ENDPOINT, { method: "POST", body: JSON.stringify(message.payload || {}) });
+        }
+        if (command === "segmentsGet") {
+          const trackId = String(message.trackId || "").trim();
+          if (!trackId) throw new TypeError("片段规则请求缺少 track ID");
+          return request(`${SEGMENTS_ENDPOINT}?trackId=${encodeURIComponent(trackId)}`, { method: "GET" });
+        }
+        if (command === "segmentsPut") {
+          return request(SEGMENTS_ENDPOINT, { method: "PUT", body: JSON.stringify(message.payload || {}) });
+        }
         if (command !== "save") return null;
         try {
           const result = await request(SAVE_ENDPOINT, { method: "POST", body: JSON.stringify(message.payload || {}) });
-          options.onSaveResult({ ok: true, hash: String(result.hash || "") });
+          if (message.notify !== false) options.onSaveResult({ ok: true, hash: String(result.hash || "") });
           return result;
         } catch (error) {
-          options.onSaveResult({
-            ok: false,
-            reason: String(error.payload?.reason || error.message || "save-failed"),
-            currentHash: String(error.payload?.hash || error.payload?.currentHash || ""),
-          });
+          if (message.notify !== false) {
+            options.onSaveResult({
+              ok: false,
+              reason: String(error.payload?.reason || error.message || "save-failed"),
+              currentHash: String(error.payload?.hash || error.payload?.currentHash || ""),
+            });
+          }
           throw error;
         }
       },
     });
   }
 
-  return Object.freeze({ LOAD_ENDPOINT, SAVE_ENDPOINT, createHost });
+  return Object.freeze({ LOAD_ENDPOINT, SAVE_ENDPOINT, VALIDATE_CANONICAL_ENDPOINT, TRANSLATE_ENDPOINT, MODELS_ENDPOINT, SEGMENTS_ENDPOINT, createHost });
 });

@@ -119,6 +119,29 @@ test("standalone editors expose module-owned service configuration", () => {
   assert.doesNotMatch(timelineController, /包含 EeveeSpotify\.bundle/);
 });
 
+test("standalone and coexistence builds share the transport-neutral retranslation bridge", () => {
+  const timelineController = read("Sources/EeveeSpotify/ShareEditor/LyricsTimelineEditorViewController.swift");
+  const configuration = read("Sources/EeveeSpotify/ShareEditor/LyricsShareEditorConfiguration.swift");
+  assert.match(timelineController, /case "models"/);
+  assert.match(timelineController, /case "translate"/);
+  assert.match(timelineController, /sendCommandResult\(requestID:/);
+  assert.match(configuration, /translationModelsEndpointURL/);
+  assert.doesNotMatch(timelineController, /#if MITM_LYRICS_STANDALONE[\s\S]{0,160}case "models"/);
+});
+
+test("standalone and coexistence builds share the segment rules editor bridge", () => {
+  const timelineController = read("Sources/EeveeSpotify/ShareEditor/LyricsTimelineEditorViewController.swift");
+  const configuration = read("Sources/EeveeSpotify/ShareEditor/LyricsShareEditorConfiguration.swift");
+  const timelineApp = read("layout/Library/Application Support/EeveeSpotify.bundle/TimelineEditor/app.js");
+  assert.match(timelineController, /case "segmentsGet"/);
+  assert.match(timelineController, /case "segmentsPut"/);
+  assert.match(timelineController, /error\["document"\] = document/);
+  assert.match(configuration, /segmentsEndpointURL/);
+  assert.match(timelineApp, /State\.recordSegmentConflict/);
+  assert.match(timelineApp, /State\.loadSegmentConflict/);
+  assert.doesNotMatch(timelineController, /#if MITM_LYRICS_STANDALONE[\s\S]{0,160}case "segmentsGet"/);
+});
+
 test("standalone entry hooks deduplicate the frozen Eevee-hosted actions", () => {
   const hooks = read("Sources/EeveeSpotify/ShareEditor/LyricsEditorEntryHooks.x.swift");
   assert.match(hooks, /mitm-lyrics-studio\.share/);

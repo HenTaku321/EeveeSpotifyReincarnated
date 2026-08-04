@@ -10,7 +10,8 @@ private let standaloneObserver = MITMLyricsPlayerObserver()
 
 @objc final class MITMLyricsPlayerObserver: NSObject {
     @objc func player(_ player: AnyObject, stateDidChange newState: AnyObject) {
-        LyricsTimelinePlayerBridge.shared.capture(player: player, state: newState)
+        let event = LyricsTimelinePlayerBridge.shared.capture(player: player, state: newState)
+        SongSegmentSkipper.shared.process(event: event, player: player)
     }
 
     @objc func player(
@@ -18,7 +19,8 @@ private let standaloneObserver = MITMLyricsPlayerObserver()
         stateDidChange newState: AnyObject,
         fromState oldState: AnyObject
     ) {
-        LyricsTimelinePlayerBridge.shared.capture(player: player, state: newState)
+        let event = LyricsTimelinePlayerBridge.shared.capture(player: player, state: newState)
+        SongSegmentSkipper.shared.process(event: event, player: player)
     }
 
     @objc func player(_ player: AnyObject, didEncounterError error: AnyObject) {}

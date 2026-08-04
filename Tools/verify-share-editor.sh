@@ -111,7 +111,9 @@ node --check "$bundle_dir/editor-state.js"
 node --check "$bundle_dir/renderer.js"
 node --check "$timeline_bundle_dir/app.js"
 node --check "$timeline_bundle_dir/editor-state.js"
+node --check "$timeline_bundle_dir/browser-host.js"
 node --test "$repo_dir/Tools/share-editor-assets.test.js"
+node --test "$repo_dir/Tools/segment-editor-bridge.test.js"
 
 grep -Fq 'name: "shareEditor"' "$source_dir/LyricsShareEditorViewController.swift"
 grep -Fq 'X-MITM-Lyrics-Token' "$source_dir/LyricsShareEditorViewController.swift"
@@ -169,6 +171,10 @@ grep -Fq 'normalizedTrackID.utf8.count == 22' "$source_dir/LyricsShareEditorDocu
 grep -Fq 'token.utf8.count <= 4096' "$source_dir/LyricsShareEditorConfiguration.swift"
 grep -Fq 'name: "timelineEditor"' "$source_dir/LyricsTimelineEditorViewController.swift"
 grep -Fq 'editEndpointURL' "$source_dir/LyricsTimelineEditorViewController.swift"
+grep -Fq 'segmentsEndpointURL' "$source_dir/LyricsTimelineEditorViewController.swift"
+grep -Fq 'case "segmentsGet"' "$source_dir/LyricsTimelineEditorViewController.swift"
+grep -Fq 'case "segmentsPut"' "$source_dir/LyricsTimelineEditorViewController.swift"
+grep -Fq 'error["document"] = document' "$source_dir/LyricsTimelineEditorViewController.swift"
 grep -Fq 'window.LyricsTimelineEditor.serializeState();' "$source_dir/LyricsTimelineEditorViewController.swift"
 grep -Fq 'removeScriptMessageHandler(forName: "timelineEditor")' "$source_dir/LyricsTimelineEditorViewController.swift"
 grep -Fq 'expectedTrackID' "$source_dir/LyricsTimelinePlayerBridge.swift"
@@ -220,7 +226,7 @@ grep -Fq 'function buildWords(base, translation, oldWords)' "$timeline_bundle_di
 grep -Fq 'State.viewLine(editorState, index)' "$timeline_bundle_dir/app.js"
 grep -Fq 'class="lyric-field lyric-field-translation"' "$timeline_bundle_dir/index.html"
 grep -Fq '.line-copy small:empty' "$timeline_bundle_dir/style.css"
-grep -Fq 'return `${left}(${right})`;' "$timeline_bundle_dir/editor-state.js"
+grep -Fq 'const delimiter = asciiParenthesesBalanced(left)' "$timeline_bundle_dir/editor-state.js"
 grep -Fq 'const VERSION = 2;' "$timeline_bundle_dir/editor-state.js"
 if grep -Eq 'ensureTranslationAlternative|alternativeTranslation|bestTranslationAlternative' "$timeline_bundle_dir/editor-state.js"; then
     echo "timeline translations must not read from or write to alternatives" >&2
@@ -234,7 +240,14 @@ if grep -Fq 'edits: state.edits' "$bundle_dir/editor-state.js"; then
     echo "share editor v2 projects must materialize edits into line.words" >&2
     exit 1
 fi
-grep -Fq 'loadDocument(payload) { editorState = State.createState(payload); history = []; future = []; render(); bridge({ command: "getPlayerState" }); return true; }' "$timeline_bundle_dir/app.js"
+grep -Fq 'loadDocument(payload) {' "$timeline_bundle_dir/app.js"
+grep -Fq 'function submitRetranslation()' "$timeline_bundle_dir/app.js"
+grep -Fq 'function applyRetranslation(makeStatic)' "$timeline_bundle_dir/app.js"
+grep -Fq 'id="retranslate-static-badge"' "$timeline_bundle_dir/index.html"
+grep -Fq 'id="segments-button"' "$timeline_bundle_dir/index.html"
+grep -Fq 'id="segments-load-conflict"' "$timeline_bundle_dir/index.html"
+grep -Fq 'command: "segmentsGet", trackId' "$timeline_bundle_dir/app.js"
+grep -Fq 'command: "segmentsPut", payload' "$timeline_bundle_dir/app.js"
 grep -Eq 'class="([^"]*[[:space:]])?mobile-workspace-tabs([[:space:]][^"]*)?"' "$timeline_bundle_dir/index.html"
 grep -Fq 'function activateMobileView(name)' "$timeline_bundle_dir/app.js"
 grep -Fq 'class="primary-command-dock"' "$timeline_bundle_dir/index.html"
