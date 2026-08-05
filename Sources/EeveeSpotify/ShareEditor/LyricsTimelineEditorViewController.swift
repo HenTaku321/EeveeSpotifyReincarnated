@@ -43,6 +43,7 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
     private var closeAttemptID: UUID?
     private var released = false
     private var previousInteractivePopEnabled: Bool?
+    private var statusIndexObserver: NSObjectProtocol?
 
     init() {
         let bridge = LyricsTimelineEditorBridge(delegate: nil)
@@ -77,6 +78,11 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
             action: #selector(configureLyricsService)
         )
         navigationItem.rightBarButtonItem?.accessibilityLabel = "歌词服务设置"
+        statusIndexObserver = NotificationCenter.default.addObserver(
+            forName: LyricsStatusIndexStore.didChangeNotification,
+            object: LyricsStatusIndexStore.shared,
+            queue: .main
+        ) { [weak self] _ in self?.updateLyricsStatusPrompt() }
         webView.navigationDelegate = self
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.translatesAutoresizingMaskIntoConstraints = false
@@ -317,6 +323,7 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
             let configuration = try LyricsShareEditorConfiguration.current()
             activeConfiguration = configuration
             activeTrack = track
+            updateLyricsStatusPrompt()
             activeHash = ""
             editorReady = false
             showStatus("正在读取 GitHub 歌词…", retryEnabled: false)
@@ -661,6 +668,7 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
         }
         let hash = rawHash.lowercased()
         activeHash = hash
+        LyricsStatusIndexStore.shared.refresh(force: true)
         if let requestID = commandRequestID, var payload = object {
             payload["hash"] = hash
             sendCommandResult(requestID: requestID, payload: payload)
@@ -941,6 +949,15 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
     private func showError(_ message: String) { showStatus(message, retryEnabled: true) }
     private func hideError() { statusContainer?.isHidden = true }
 
+    private func updateLyricsStatusPrompt() {
+        guard let trackID = activeTrack?.trackId,
+              let entry = LyricsStatusIndexStore.shared.entry(forTrackID: trackID) else {
+            navigationItem.prompt = nil
+            return
+        }
+        navigationItem.prompt = entry.badgeLabel
+    }
+
     private func presentNotice(_ message: String) {
         guard presentedViewController == nil else { return }
         let alert = UIAlertController(title: "歌词编辑器", message: message, preferredStyle: .alert)
@@ -951,6 +968,10 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
     private func cleanup() {
         guard !released else { return }
         released = true
+        if let statusIndexObserver = statusIndexObserver {
+            NotificationCenter.default.removeObserver(statusIndexObserver)
+            self.statusIndexObserver = nil
+        }
         playerTimer?.invalidate()
         playerTimer = nil
         requestTasks.values.forEach { $0.cancel() }
@@ -965,6 +986,7 @@ final class LyricsTimelineEditorViewController: UIViewController, WKNavigationDe
         webView.navigationDelegate = nil
         webView.stopLoading()
         activeTrack = nil
+        navigationItem.prompt = nil
         activeConfiguration = nil
         editorReady = false
     }

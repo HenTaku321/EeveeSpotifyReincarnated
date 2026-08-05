@@ -310,6 +310,8 @@ struct EeveeSpotify: Tweak {
         // For 9.1.x, activate premium patching and lyrics
         if EeveeSpotify.hookTarget == .v91 {
 
+            LyricsStatusIndexStore.shared.start()
+
             // Premium patching (9.1.x)
             // Always activate the *bootstrap interceptor*; it is required for premium patching.
             if UserDefaults.patchType.isPatching {

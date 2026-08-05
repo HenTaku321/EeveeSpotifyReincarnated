@@ -33,6 +33,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
     private var closeAttemptID: UUID?
     private var hasReleasedWebView = false
     private var previousInteractivePopEnabled: Bool?
+    private var statusIndexObserver: NSObjectProtocol?
 
     init() {
         let bridge = LyricsShareEditorBridge(delegate: nil)
@@ -87,6 +88,11 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
             action: #selector(configureLyricsService)
         )
         navigationItem.rightBarButtonItem?.accessibilityLabel = "歌词服务设置"
+        statusIndexObserver = NotificationCenter.default.addObserver(
+            forName: LyricsStatusIndexStore.didChangeNotification,
+            object: LyricsStatusIndexStore.shared,
+            queue: .main
+        ) { [weak self] _ in self?.updateLyricsStatusPrompt() }
 
         webView.navigationDelegate = self
         webView.scrollView.contentInsetAdjustmentBehavior = .never
@@ -353,6 +359,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
         activeRequestID = nil
         projectReady = false
         activeTrack = track
+        updateLyricsStatusPrompt()
         showStatus("正在读取 GitHub 歌词…", retryEnabled: false)
 
         let configuration: LyricsShareEditorConfiguration
@@ -836,9 +843,22 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
         statusContainer?.isHidden = true
     }
 
+    private func updateLyricsStatusPrompt() {
+        guard let trackID = activeTrack?.trackId,
+              let entry = LyricsStatusIndexStore.shared.entry(forTrackID: trackID) else {
+            navigationItem.prompt = nil
+            return
+        }
+        navigationItem.prompt = entry.badgeLabel
+    }
+
     private func cancelNetworkAndReleaseWebView() {
         guard !hasReleasedWebView else { return }
         hasReleasedWebView = true
+        if let statusIndexObserver = statusIndexObserver {
+            NotificationCenter.default.removeObserver(statusIndexObserver)
+            self.statusIndexObserver = nil
+        }
         projectTimer?.invalidate()
         projectTimer = nil
         artworkLoader.cancel()
@@ -855,6 +875,7 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
         bridge.delegate = nil
         projectReady = false
         activeTrack = nil
+        navigationItem.prompt = nil
         exportInFlight = false
         documentLoaded = false
     }

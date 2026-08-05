@@ -32,6 +32,7 @@ struct MITMLyricsStudio: Tweak {
             return
         }
         writeDebugLog("[Bootstrap] MITM Lyrics Studio starting on Spotify \(version)")
+        LyricsStatusIndexStore.shared.start()
         scheduleStandaloneActivation(attempt: 1)
     }
 }

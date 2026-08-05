@@ -3,6 +3,7 @@ import Foundation
 struct LyricsShareEditorConfiguration {
     static let endpointPath = "v1/share-editor/lyrics"
     static let editEndpointPath = "v1/lyrics/edit"
+    static let lyricsStatusIndexEndpointPath = "v1/lyrics/status-index"
     static let translationModelsEndpointPath = "v1/translation/models"
     static let shareEditorTranslateEndpointPath = "v1/share-editor/translate"
     static let shareEditorValidateEndpointPath = "v1/share-editor/validate"
@@ -11,6 +12,7 @@ struct LyricsShareEditorConfiguration {
 
     let endpointURL: URL
     let editEndpointURL: URL
+    let lyricsStatusIndexEndpointURL: URL
     let translationModelsEndpointURL: URL
     let shareEditorTranslateEndpointURL: URL
     let shareEditorValidateEndpointURL: URL
@@ -69,6 +71,7 @@ struct LyricsShareEditorConfiguration {
         return LyricsShareEditorConfiguration(
             endpointURL: baseURL.appendingPathComponent(endpointPath),
             editEndpointURL: baseURL.appendingPathComponent(editEndpointPath),
+            lyricsStatusIndexEndpointURL: baseURL.appendingPathComponent(lyricsStatusIndexEndpointPath),
             translationModelsEndpointURL: baseURL.appendingPathComponent(translationModelsEndpointPath),
             shareEditorTranslateEndpointURL: baseURL.appendingPathComponent(shareEditorTranslateEndpointPath),
             shareEditorValidateEndpointURL: baseURL.appendingPathComponent(shareEditorValidateEndpointPath),
