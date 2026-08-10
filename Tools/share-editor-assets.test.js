@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const ShareState = require("../layout/Library/Application Support/EeveeSpotify.bundle/ShareEditor/editor-state.js");
+const ShareRenderer = require("../layout/Library/Application Support/EeveeSpotify.bundle/ShareEditor/renderer.js");
 const ShareApp = require("../layout/Library/Application Support/EeveeSpotify.bundle/ShareEditor/app.js");
 const TimelineState = require("../layout/Library/Application Support/EeveeSpotify.bundle/TimelineEditor/editor-state.js");
 const SHARE_BUNDLE = path.join(__dirname, "../layout/Library/Application Support/EeveeSpotify.bundle/ShareEditor");
@@ -158,6 +159,48 @@ test("share editor preserves scalar, object, and array alternatives as opaque me
     const restored = ShareState.restoreState(ShareState.serializeState(state));
     assert.deepEqual(restored.document.lyrics.alternatives, alternatives);
   }
+});
+
+test("share editor poster keeps six long base lyrics paired with short Chinese translations", () => {
+  const pairs = [
+    ["Chamber echoing with dust through corridors beyond the silent altar", "密室回荡着尘埃"],
+    ["Drifting through beams of light beneath a sky without an ending", "飘过道道光束"],
+    ["Shadows cast upon the stones where ancient voices wait in silence", "阴影投落石上"],
+    ["Temple doors reveal the night and every constellation burning", "神殿之门显露夜空"],
+    ["Surging magnitude beneath the crushing weight of all the stars", "群星重压下涌动"],
+    ["Suffocating density of gravity's well surrounds the final chamber", "重力深井令人窒息"],
+  ];
+  const state = ShareState.createEditorState({
+    source: "github",
+    hash: HASH,
+    track: { trackId: "overflow", title: "Overflow", artist: "Artist", album: "Album" },
+    lyrics: {
+      language: "en",
+      lines: pairs.map(([base, translation]) => ({ words: `${base}(${translation})` })),
+      alternatives: [],
+    },
+    selectedLineIndices: pairs.map((_pair, index) => index),
+  });
+  state.template = "poster";
+  state.style = { ...state.style, fontType: "rounded", textAlignment: "center", textColor: "#ffffff" };
+  const context = {
+    font: "",
+    measureText: (value) => ({ width: String(value).length * 6.5 }),
+  };
+  const metrics = ShareRenderer.resolveTemplate("poster");
+  const layout = ShareRenderer.createLyricsLayout(context, state, metrics, {
+    fontModes: { classic: "custom", rounded: "custom" },
+  });
+
+  assert.equal(layout.groups.length, pairs.length);
+  layout.groups.forEach((group, index) => {
+    assert(group.rows.length >= 1, `base lyric ${index} must remain visible`);
+    assert.equal(group.translationRows.join(""), pairs[index][1], `translation ${index} must remain visible`);
+  });
+  assert(
+    layout.height <= metrics.lyricsBottom - metrics.lyricsTop + 0.001,
+    `six-group poster layout exceeds the lyric band: ${layout.height}`,
+  );
 });
 
 function timelineFixture() {

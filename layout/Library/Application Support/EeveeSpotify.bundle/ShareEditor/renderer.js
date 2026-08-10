@@ -349,9 +349,9 @@
     // lyrics band (~6 iterations instead of a 1px linear scan).
     const largest = measure(M.lyricMaxSize);
     if (largest.height <= availableHeight) return largest;
-    const smallest = measure(M.lyricMinSize);
-    if (smallest.height <= availableHeight) {
-      let fitting = smallest;
+    const regularSmallest = measure(M.lyricMinSize);
+    if (regularSmallest.height <= availableHeight) {
+      let fitting = regularSmallest;
       let lo = M.lyricMinSize;
       let hi = M.lyricMaxSize;
       while (hi - lo > 0.5) {
@@ -367,24 +367,44 @@
       return fitting;
     }
 
-    // Even the minimum size overflows: allocate row quotas and truncate.
+    // Full content still overflows at the normal minimum. If even one base
+    // row plus one translation row per group cannot fit, reduce only this
+    // exceptional layout enough to preserve those bilingual pairs.
+    const pairedFirstRowHeight = (layout) => layout.groups.reduce((total, group, index) => total
+      + layout.lineHeight
+      + (index ? M.lyricGroupGap : 0)
+      + (group.translationRows.length ? M.translationGap + layout.translationLineHeight : 0), 0);
+    let smallest = regularSmallest;
+    const overflowMinSize = Math.min(M.lyricMinSize, 11);
+    if (pairedFirstRowHeight(smallest) > availableHeight && M.lyricMinSize > overflowMinSize) {
+      for (let size = M.lyricMinSize - 0.5; size >= overflowMinSize; size -= 0.5) {
+        smallest = measure(size);
+        if (pairedFirstRowHeight(smallest) <= availableHeight) break;
+      }
+    }
+
+    // Allocate paired first rows before any secondary wrapped row. A visible
+    // translated group must never expose its base lyric while hiding the
+    // corresponding translation.
     const { fontSize, lineHeight, translationFontSize, translationLineHeight, groups } = smallest;
     const allocations = groups.map(() => ({ base: 0, translation: 0 }));
     let remainingHeight = availableHeight;
     let visibleGroups = 0;
-    // Preserve one readable base row per selected group before spending the
-    // constrained poster budget on translations or additional wrapped rows.
     for (let index = 0; index < groups.length; index += 1) {
-      const cost = lineHeight + (visibleGroups ? M.lyricGroupGap : 0);
+      const hasTranslation = groups[index].translationRows.length > 0;
+      const cost = lineHeight
+        + (visibleGroups ? M.lyricGroupGap : 0)
+        + (hasTranslation ? M.translationGap + translationLineHeight : 0);
       if (remainingHeight + 0.001 < cost) break;
       allocations[index].base = 1;
+      allocations[index].translation = hasTranslation ? 1 : 0;
       remainingHeight -= cost;
       visibleGroups += 1;
     }
-    // Preserve wrapped base lyrics before translations. This avoids turning
-    // every selected long lyric into a one-row ellipsis merely to show more
-    // secondary rows.
-    while (remainingHeight + 0.001 >= lineHeight) {
+
+    // Spend the remaining height round-robin across each group's base and
+    // translation rows so neither language can monopolize the overflow budget.
+    while (remainingHeight > 0) {
       let allocated = false;
       for (let index = 0; index < groups.length; index += 1) {
         if (!allocations[index].base) continue;
@@ -393,21 +413,6 @@
           remainingHeight -= lineHeight;
           allocated = true;
         }
-      }
-      if (!allocated) break;
-    }
-    // A translation's first row also owns translationGap. Once all visible
-    // base rows are allocated, translations consume only the remaining space.
-    for (let index = 0; index < groups.length; index += 1) {
-      if (!allocations[index].base || !groups[index].translationRows.length) continue;
-      const cost = M.translationGap + translationLineHeight;
-      if (remainingHeight + 0.001 < cost) continue;
-      allocations[index].translation = 1;
-      remainingHeight -= cost;
-    }
-    while (remainingHeight + 0.001 >= translationLineHeight) {
-      let allocated = false;
-      for (let index = 0; index < groups.length; index += 1) {
         if (allocations[index].translation > 0
           && allocations[index].translation < groups[index].translationRows.length
           && remainingHeight + 0.001 >= translationLineHeight) {
