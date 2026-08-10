@@ -368,9 +368,21 @@ fi
 
 if [ "$#" -eq 1 ]; then
     web_source=$1
-    for file in index.html app.js editor-state.js renderer.js style.css; do
+    for file in index.html editor-state.js style.css; do
         cmp "$web_source/$file" "$bundle_dir/$file"
     done
+    for marker in \
+        'pendingState || pendingDocument || LOADING_DOCUMENT' \
+        'loadDocument(document, options)' \
+        'this.loadDocument(payload, { positionMs: bootstrap.positionMs })' \
+        'translationToggle.disabled = !State.hasSelectedTranslations(state)'; do
+        grep -Fq "$marker" "$web_source/app.js"
+        grep -Fq "$marker" "$bundle_dir/app.js"
+    done
+    grep -Fq 'state.showTranslations === false' "$web_source/renderer.js"
+    grep -Fq 'state.showTranslations === false' "$bundle_dir/renderer.js"
+    grep -Fq 'lyricsInset: 30' "$bundle_dir/renderer.js"
+    grep -Fq 'lyricMaxSize: 24' "$bundle_dir/renderer.js"
 fi
 
 

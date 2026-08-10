@@ -52,29 +52,22 @@
   const EXPORT_SCALES = Object.freeze({ 891: 3, 1782: 6, 2673: 9 });
   const DEFAULT_EXPORT_PIXELS = 1782;
   const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
-  const DEMO_DOCUMENT = Object.freeze({
+  const LOADING_DOCUMENT = Object.freeze({
     source: "github",
     hash: "",
     track: {
-      trackId: "demo",
-      title: "夜色与回声",
-      artist: "GitHub Lyrics",
-      album: "Share Editor",
+      trackId: "loading",
+      title: "正在载入歌词",
+      artist: "",
+      album: "",
       coverUrl: "",
     },
     lyrics: {
-      syncType: "LINE_SYNCED",
+      syncType: "UNSYNCED",
       provider: "github",
-      language: "zh",
+      language: "",
       isRtlLanguage: false,
-      lines: [
-        { startTimeMs: "0", words: "灯光落在安静的街角", endTimeMs: "3200" },
-        { startTimeMs: "3200", words: "我们把未说完的话写成歌", endTimeMs: "6800" },
-        { startTimeMs: "6800", words: "让每一次回声都有颜色", endTimeMs: "10100" },
-        { startTimeMs: "10100", words: "在天亮以前慢慢经过", endTimeMs: "13800" },
-        { startTimeMs: "13800", words: "下一行仍然可以重新编辑", endTimeMs: "17200" },
-        { startTimeMs: "17200", words: "最后只留下属于你的画面", endTimeMs: "21000" },
-      ],
+      lines: [{ startTimeMs: "", words: "", endTimeMs: "" }],
       alternatives: [],
     },
     colors: {
@@ -82,7 +75,7 @@
       text: "#05090e",
       highlightText: "#ffffff",
     },
-    selectedLineIndices: [0, 1, 2, 3],
+    selectedLineIndices: [],
   });
 
   let mountedController = null;
@@ -541,7 +534,7 @@
         "track-name", "undo-button", "redo-button", "mobile-project-button", "load-button", "project-menu-button", "project-input",
         "editor-grid", "selection-limit", "lyrics-list", "lyrics-panel-toggle", "inspector-panel-toggle", "inspector-resize-handle", "track-summary", "status-output", "canvas-stage", "preview-canvas", "template-switch",
         "export-canvas", "export-resolution", "export-size", "download-button", "share-button", "background-color", "text-color", "tint-color",
-        "caps-toggle", "track-artwork-actions", "use-artwork-background", "use-artwork-cover", "add-artwork-sticker", "background-input", "background-file-name", "remove-background", "cover-input",
+        "caps-toggle", "translation-toggle", "track-artwork-actions", "use-artwork-background", "use-artwork-cover", "add-artwork-sticker", "background-input", "background-file-name", "remove-background", "cover-input",
         "cover-file-name", "remove-cover", "sticker-palette", "sticker-input", "sticker-summary", "delete-sticker",
         "source-dialog", "source-form", "close-source-dialog", "cancel-source-dialog", "repository-path",
         "repository-refresh", "repository-up", "repository-search", "repository-list", "repository-status",
@@ -650,6 +643,7 @@
       e.textColor.addEventListener("input", (event) => this.execute({ type: "setStyle", key: "textColor", value: event.target.value }, false));
       e.tintColor.addEventListener("input", (event) => this.execute({ type: "setStyle", key: "backgroundTintedColor", value: event.target.value }, false));
       e.capsToggle.addEventListener("change", (event) => this.execute({ type: "setStyle", key: "capsMode", value: event.target.checked ? "allCaps" : "normal" }, false));
+      e.translationToggle.addEventListener("click", () => this.execute({ type: "toggleTranslations" }, false));
 
       document.querySelectorAll(".mobile-tool-dock button[data-mobile-tool]").forEach((button) => {
         button.addEventListener("click", () => this.activateMobileTool(button.dataset.mobileTool));
@@ -691,10 +685,16 @@
     }
 
     loadDocument(documentInput) {
+      const options = arguments[1];
       const document = State.normalizeDocument(documentInput);
+      const selectedLineIndices = State.defaultSelectedIndices(
+        document.lyrics.lines,
+        document.lyrics.syncType,
+        options && options.positionMs,
+      );
       this.imageCache.clear();
       this.expandedLineIndex = null;
-      this.history.reset(State.createEditorState(document));
+      this.history.reset(State.createEditorState({ document, selectedLineIndices }));
       this.elements.lyricsList.scrollTop = 0;
       this.elements.lyricsList.scrollLeft = 0;
       this.setStatus("歌词已载入");
@@ -875,6 +875,10 @@
       this.elements.textColor.value = state.style.textColor.slice(0, 7);
       this.elements.tintColor.value = state.style.backgroundTintedColor.slice(0, 7);
       this.elements.capsToggle.checked = state.style.capsMode === "allCaps";
+      this.elements.translationToggle.disabled = !State.hasSelectedTranslations(state);
+      this.elements.translationToggle.classList.toggle("is-selected", state.showTranslations);
+      this.elements.translationToggle.setAttribute("aria-pressed", String(state.showTranslations));
+      this.elements.translationToggle.textContent = state.showTranslations ? "显示" : "隐藏";
       this.elements.removeBackground.disabled = !state.media.background && !state.media.useTrackArtworkAsBackground;
       this.elements.removeCover.disabled = !state.media.cover;
       const hasTrackArtwork = Boolean(state.document.track.coverUrl);
@@ -1217,7 +1221,7 @@
           State.validateImageDataURL(coverDataURL);
           payload.track = { ...(payload.track || track), coverUrl: coverDataURL };
         }
-        this.loadDocument(payload);
+        this.loadDocument(payload, { positionMs: bootstrap.positionMs });
         this.setStatus("当前曲目已载入");
         return true;
       } catch (error) {
@@ -1528,11 +1532,22 @@
     setSourceLogos(sources) {
       return setSourceLogos(sources);
     },
-    loadDocument(document) {
-      if (mountedController) return Promise.resolve(mountedController.loadDocument(document));
+    loadDocument(document, options) {
+      if (mountedController) return Promise.resolve(mountedController.loadDocument(document, options));
       pendingDocument = State.normalizeDocument(document);
       pendingState = null;
-      return Promise.resolve(pendingDocument);
+      if (options && Object.prototype.hasOwnProperty.call(options, "positionMs")) {
+        pendingState = State.createEditorState({
+          document: pendingDocument,
+          selectedLineIndices: State.defaultSelectedIndices(
+            pendingDocument.lyrics.lines,
+            pendingDocument.lyrics.syncType,
+            options.positionMs,
+          ),
+        });
+        pendingDocument = null;
+      }
+      return Promise.resolve(pendingState ? pendingState.document : pendingDocument);
     },
     restoreState(serialized) {
       if (mountedController) return mountedController.restoreState(serialized);
@@ -1560,7 +1575,7 @@
     // 浏览器侧没有系统分享：无原生桥时隐藏 share 按钮，只留「保存 PNG」。
     const shareButton = root.document.getElementById("share-button");
     if (shareButton) shareButton.hidden = !nativeBridge();
-    const initial = pendingState || pendingDocument || DEMO_DOCUMENT;
+    const initial = pendingState || pendingDocument || LOADING_DOCUMENT;
     mountedController = new EditorController(initial.document ? initial.document : initial);
     if (pendingState) mountedController.history.reset(pendingState);
     mountedController.renderAll({ rebuildLyrics: true });
@@ -1578,7 +1593,7 @@
 
   return Object.freeze({
     ENDPOINT,
-    DEMO_DOCUMENT,
+    LOADING_DOCUMENT,
     createDocumentGateway,
     calculatePreviewSquareSize,
     resolvePreviewScale,

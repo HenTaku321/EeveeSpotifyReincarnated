@@ -533,6 +533,11 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
             throw LyricsShareEditorError.invalidResponse("歌词品牌 Logo 数据超过大小限制。")
         }
         let sourceLogosEncoded = sourceLogosData.base64EncodedString()
+        let snapshot = LyricsTimelinePlayerBridge.shared.snapshot()
+        let matchingPositionMs: Int? = snapshot.trackId == activeTrack?.trackId
+            ? snapshot.positionMs
+            : nil
+        let loadOptions = matchingPositionMs.map { "{ positionMs: \($0) }" } ?? "{}"
         let projectScript: String
         var preservedProjectName: String?
         switch loadProject(for: activeTrack?.trackId) {
@@ -572,7 +577,8 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
           const sourceLogos = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(sourceLogoBytes));
           window.ShareEditor.setSourceLogos(sourceLogos);
           const editorDocument = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-          window.ShareEditor.loadDocument(editorDocument);
+          const loadOptions = \(loadOptions);
+          window.ShareEditor.loadDocument(editorDocument, loadOptions);
           let projectRestored = true;
           let projectError = '';
           \(projectScript)

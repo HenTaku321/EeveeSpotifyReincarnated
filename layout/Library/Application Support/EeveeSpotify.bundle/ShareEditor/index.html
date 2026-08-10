@@ -66,6 +66,7 @@
             <button type="button" class="is-selected" data-template="skeleton" aria-pressed="true">骨架</button>
             <button type="button" data-template="lyrics" aria-pressed="false">歌词</button>
             <button type="button" data-template="poster" aria-pressed="false">海报</button>
+            <button type="button" data-template="contrast" aria-pressed="false">冲击</button>
           </div>
           <div class="export-bar" aria-label="导出工具">
             <label class="export-resolution" for="export-resolution">
@@ -137,6 +138,10 @@
             <span>全部大写</span>
             <input id="caps-toggle" type="checkbox" role="switch">
           </label>
+          <div class="toggle-row">
+            <span>译文</span>
+            <button id="translation-toggle" class="binary-button is-selected" type="button" aria-pressed="true">显示</button>
+          </div>
           <div class="control-field">
             <span>左下角 Logo</span>
             <div class="segmented-pill" data-control="sourceLogoVariant" role="group" aria-label="左下角 Logo 颜色">

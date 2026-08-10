@@ -83,6 +83,7 @@
     // Regression anchor: skeleton must stay an empty override so it renders
     // exactly like the pre-template layout (LAYOUT is the single source).
     skeleton: Object.freeze({}),
+    contrast: Object.freeze({}),
     lyrics: Object.freeze({
       header: "none",
       footer: "trackline",
@@ -323,7 +324,9 @@
       index: line.index,
       text: transformCaps(line.text, state.style.capsMode, language),
       base: transformCaps(line.base, state.style.capsMode, language),
-      translation: transformCaps(line.translation, state.style.capsMode, language),
+      translation: state.showTranslations === false
+        ? ""
+        : transformCaps(line.translation, state.style.capsMode, language),
     }));
 
     const measure = (fontSize) => {

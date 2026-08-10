@@ -279,3 +279,47 @@ test("native timeline bridge serves model, translation, validation, and awaited 
   assert.match(configuration, /shareEditorTranslateEndpointURL/);
   assert.match(configuration, /shareEditorValidateEndpointURL/);
 });
+
+test("bundled share editor hides translations as persisted presentation state only", () => {
+  const original = {
+    source: "github",
+    hash: HASH,
+    track: { trackId: "track-1", title: "Title", artist: "Artist", album: "Album" },
+    lyrics: { lines: [{ words: "Original(译文)" }], alternatives: [] },
+    selectedLineIndices: [0],
+  };
+  const state = ShareState.reduceEditorState(ShareState.createEditorState(original), { type: "toggleTranslations" });
+  const layout = ShareRenderer.createLyricsLayout({
+    font: "",
+    measureText: (value) => ({ width: String(value).length * 6.5 }),
+  }, state, ShareRenderer.resolveTemplate("skeleton"), {});
+
+  assert.equal(state.showTranslations, false);
+  assert.deepEqual(layout.groups[0].translationRows, []);
+  assert.equal(JSON.parse(ShareState.serializeState(state)).document.lyrics.lines[0].words, "Original(译文)");
+  assert.equal(ShareState.restoreState(ShareState.serializeState(state)).showTranslations, false);
+});
+
+test("native share bootstrap passes position only for the matching active track", () => {
+  const controller = readSource("LyricsShareEditorViewController.swift");
+  assert.match(controller, /let snapshot = LyricsTimelinePlayerBridge\.shared\.snapshot\(\)/);
+  assert.match(controller, /snapshot\.trackId == activeTrack\?\.trackId/);
+  assert.match(controller, /let matchingPositionMs: Int\?/);
+  assert.match(controller, /const loadOptions = \\\(loadOptions\);/);
+  assert.doesNotMatch(controller, /const loadOptions = \(loadOptions\);/);
+  assert.match(controller, /window\.ShareEditor\.loadDocument\(editorDocument, loadOptions\)/);
+});
+
+test("iOS keeps its poster geometry while shared editor behavior stays mirrored", () => {
+  const renderer = fs.readFileSync(path.join(SHARE_BUNDLE, "renderer.js"), "utf8");
+  const app = fs.readFileSync(path.join(SHARE_BUNDLE, "app.js"), "utf8");
+  const state = fs.readFileSync(path.join(SHARE_BUNDLE, "editor-state.js"), "utf8");
+  const html = fs.readFileSync(path.join(SHARE_BUNDLE, "index.html"), "utf8");
+  assert.match(renderer, /poster:\s*Object\.freeze\(\{[\s\S]*lyricsInset:\s*30,[\s\S]*lyricMaxSize:\s*24,/);
+  assert.match(renderer, /state\.showTranslations === false/);
+  assert.match(app, /pendingState \|\| pendingDocument \|\| LOADING_DOCUMENT/);
+  assert.match(app, /this\.loadDocument\(payload, \{ positionMs: bootstrap\.positionMs \}\)/);
+  assert.match(state, /function defaultSelectedIndices\(/);
+  assert.match(state, /showTranslations: state\.showTranslations/);
+  assert.match(html, /id="translation-toggle"[^>]*aria-pressed="true"/);
+});

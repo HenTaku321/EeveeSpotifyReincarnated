@@ -16,8 +16,9 @@
   const CAPS_MODES = Object.freeze(["normal", "allCaps"]);
   const SOURCE_LOGO_VARIANTS = Object.freeze(["original", "white"]);
   // Card templates: skeleton is the conservative default, lyrics is the
-  // lyrics-dominant layout, poster bleeds the cover art into the background.
-  const CARD_TEMPLATES = Object.freeze(["skeleton", "lyrics", "poster"]);
+  // lyrics-dominant layout, poster bleeds the cover art into the background,
+  // and contrast keeps skeleton geometry with a dark high-impact palette.
+  const CARD_TEMPLATES = Object.freeze(["skeleton", "lyrics", "poster", "contrast"]);
   const PROJECT_VERSION = 2;
   const MAX_SELECTED_LINES = 6;
   const HISTORY_LIMIT = 80;
@@ -77,7 +78,21 @@
   function buildWords(base, translation) {
     const left = String(base == null ? "" : base);
     const right = String(translation == null ? "" : translation).trim();
-    return right ? `${left}(${right})` : left;
+    if (!right) return left;
+    const delimiter = asciiParenthesesBalanced(left) ? ["(", ")"] : ["（", "）"];
+    return `${left}${delimiter[0]}${right}${delimiter[1]}`;
+  }
+
+  function asciiParenthesesBalanced(value) {
+    let depth = 0;
+    for (const character of String(value == null ? "" : value)) {
+      if (character === "(") depth += 1;
+      else if (character === ")") {
+        depth -= 1;
+        if (depth < 0) return false;
+      }
+    }
+    return depth === 0;
   }
 
   function utf8ByteLength(value) {
@@ -316,6 +331,46 @@
     return valid.slice(0, MAX_SELECTED_LINES).sort((a, b) => a - b);
   }
 
+  function lineTimeMs(value) {
+    if (typeof value !== "string" && typeof value !== "number") return null;
+    if (typeof value === "string" && !value.trim()) return null;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+  }
+
+  function defaultSelectedIndices(lines, syncType, positionMs) {
+    const fallback = normalizeSelectedIndices(undefined, lines, true);
+    if (String(syncType || "").toUpperCase() === "UNSYNCED"
+      || typeof positionMs !== "number"
+      || !Number.isFinite(positionMs)
+      || positionMs < 0) return fallback;
+
+    let activeIndex = -1;
+    let lastStartedIndex = -1;
+    for (let index = 0; index < lines.length; index += 1) {
+      const start = lineTimeMs(lines[index] && lines[index].startTimeMs);
+      if (start === null) continue;
+      if (start <= positionMs) lastStartedIndex = index;
+      const explicitEnd = lineTimeMs(lines[index] && lines[index].endTimeMs);
+      const nextStart = lineTimeMs(lines[index + 1] && lines[index + 1].startTimeMs);
+      const end = explicitEnd !== null && explicitEnd > start
+        ? explicitEnd
+        : nextStart !== null && nextStart > start
+          ? nextStart
+          : null;
+      if (start <= positionMs && end !== null && positionMs < end) {
+        activeIndex = index;
+        break;
+      }
+    }
+    if (activeIndex < 0) activeIndex = lastStartedIndex;
+    if (activeIndex < 0) return fallback;
+
+    const count = Math.min(4, lines.length);
+    const startIndex = Math.min(Math.max(0, activeIndex - 1), Math.max(0, lines.length - count));
+    return Array.from({ length: count }, (_unused, offset) => startIndex + offset);
+  }
+
   function normalizeDocument(input) {
     if (!isPlainObject(input)) throw new TypeError("document must be an object");
     if (input.source !== "github") throw new TypeError("document.source must be github");
@@ -406,6 +461,34 @@
     };
   }
 
+  function darkenHexColor(value, factor) {
+    const color = normalizeHexColor(value, "#498cb7").slice(0, 7);
+    const scale = clamp(factor, 0, 1);
+    const channels = [1, 3, 5].map((offset) => Math.round(parseInt(color.slice(offset, offset + 2), 16) * scale));
+    return `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+  }
+
+  function presetStyle(template, base) {
+    if (template === "poster") {
+      return {
+        ...base,
+        textColor: "#ffffff",
+        textAlignment: "center",
+        fontType: "rounded",
+        sourceLogoVariant: "white",
+      };
+    }
+    if (template === "contrast") {
+      return {
+        ...base,
+        backgroundColor: darkenHexColor(base.backgroundColor, 0.5),
+        textColor: "#f4f2ea",
+        sourceLogoVariant: "white",
+      };
+    }
+    return base;
+  }
+
   function createEditorState(input) {
     const document = input && input.document && Object.isFrozen(input.document)
       ? input.document
@@ -417,7 +500,7 @@
     const style = normalizeEditorStyle(initialStyle, document);
     const styleBeforePoster = isPlainObject(overrides.styleBeforePoster)
       ? normalizeEditorStyle(overrides.styleBeforePoster, document)
-      : template === "poster"
+      : template === "poster" || template === "contrast"
         ? normalizeEditorStyle({}, document)
         : null;
 
@@ -431,6 +514,7 @@
         false,
       ),
       edits: Object.create(null),
+      showTranslations: overrides.showTranslations !== false,
       template,
       style,
       styleBeforePoster,
@@ -456,6 +540,10 @@
       const parts = splitTranslation(text);
       return { index, text, base: parts.base, translation: parts.translation };
     });
+  }
+
+  function hasSelectedTranslations(state) {
+    return getSelectedLines(state).some((line) => Boolean(line.translation.trim()));
   }
 
   function replaceSticker(stickers, id, updater) {
@@ -562,6 +650,8 @@
         else edits[index] = action.text;
         return { ...state, edits };
       }
+      case "toggleTranslations":
+        return { ...state, showTranslations: !state.showTranslations };
       case "setStyle": {
         if (!Object.prototype.hasOwnProperty.call(state.style, action.key)) return state;
         let value = action.value;
@@ -577,21 +667,20 @@
       case "setTemplate": {
         if (!CARD_TEMPLATES.includes(action.template)) return state;
         if (state.template === action.template) return state;
-        if (action.template === "poster") {
+        const currentIsPreset = state.template === "poster" || state.template === "contrast";
+        const nextIsPreset = action.template === "poster" || action.template === "contrast";
+        if (nextIsPreset) {
+          const baseStyle = currentIsPreset
+            ? state.styleBeforePoster || normalizeEditorStyle({}, state.document)
+            : state.style;
           return {
             ...state,
             template: action.template,
-            styleBeforePoster: state.style,
-            style: {
-              ...state.style,
-              textColor: "#ffffff",
-              textAlignment: "center",
-              fontType: "rounded",
-              sourceLogoVariant: "white",
-            },
+            styleBeforePoster: baseStyle,
+            style: presetStyle(action.template, baseStyle),
           };
         }
-        if (state.template === "poster") {
+        if (currentIsPreset) {
           return {
             ...state,
             template: action.template,
@@ -744,6 +833,7 @@
       version: PROJECT_VERSION,
       document,
       selectedLineIndices: state.selectedLineIndices,
+      showTranslations: state.showTranslations,
       template: state.template,
       style: state.style,
       styleBeforePoster: state.styleBeforePoster,
@@ -772,6 +862,7 @@
     let state = createEditorState({
       document,
       selectedLineIndices: payload.selectedLineIndices,
+      showTranslations: payload.showTranslations,
       style: payload.style,
       styleBeforePoster: payload.styleBeforePoster,
       template: payload.template,
@@ -824,16 +915,19 @@
     MAX_SELECTED_LINES,
     MAX_STICKERS,
     MAX_IMAGE_BYTES,
+    darkenHexColor,
     MAX_RESOURCE_BYTES,
     MAX_PROJECT_BYTES,
     MAX_HISTORY_RESOURCE_BYTES,
     MAX_IMAGE_DIMENSION,
     MAX_IMAGE_PIXELS,
     normalizeDocument,
+    defaultSelectedIndices,
     createEditorState,
     reduceEditorState,
     createHistory,
     getSelectedLines,
+    hasSelectedTranslations,
     selectedLineText,
     splitTranslation,
     buildWords,

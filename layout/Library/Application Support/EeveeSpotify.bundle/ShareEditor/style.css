@@ -676,6 +676,23 @@ input[type="color"]::-webkit-color-swatch { border: 0; border-radius: var(--r-sm
   font-size: var(--fs-base);
 }
 
+.binary-button {
+  min-width: 64px;
+  min-height: 34px;
+  padding: 0 var(--s-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: var(--fs-base);
+}
+
+.binary-button.is-selected {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
 /* 自绘 switch：轨道 44×26，开启态 --accent */
 input[role="switch"] {
   appearance: none;
