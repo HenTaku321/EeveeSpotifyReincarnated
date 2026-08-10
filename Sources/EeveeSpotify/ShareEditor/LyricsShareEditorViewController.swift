@@ -5,6 +5,7 @@ import WebKit
 
 final class LyricsShareEditorViewController: UIViewController, WKNavigationDelegate, LyricsShareEditorBridgeDelegate {
     private static let maximumDocumentBytes = 8 * 1024 * 1024
+    private static let supportedProjectVersions: Set<Int> = [1, 2]
 
     private enum ProjectLoadResult {
         case missing
@@ -679,11 +680,12 @@ final class LyricsShareEditorViewController: UIViewController, WKNavigationDeleg
         guard FileManager.default.fileExists(atPath: url.path) else { return .missing }
         guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
               let fileSize = values.fileSize,
-              fileSize <= 32 * 1024 * 1024,
-              let data = try? Data(contentsOf: url), data.count <= 32 * 1024 * 1024,
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              root["version"] as? Int == 1,
-              let document = root["document"] as? [String: Any],
+                  fileSize <= 32 * 1024 * 1024,
+                  let data = try? Data(contentsOf: url), data.count <= 32 * 1024 * 1024,
+                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let version = root["version"] as? Int,
+                  Self.supportedProjectVersions.contains(version),
+                  let document = root["document"] as? [String: Any],
               let track = document["track"] as? [String: Any],
               track["trackId"] as? String == trackID else { return .unreadable }
         return .loaded(data)

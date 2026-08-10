@@ -310,6 +310,12 @@ test("native share bootstrap passes position only for the matching active track"
   assert.match(controller, /window\.ShareEditor\.loadDocument\(editorDocument, loadOptions\)/);
 });
 
+test("native project restore accepts legacy v1 and current v2 share projects", () => {
+  const controller = readSource("LyricsShareEditorViewController.swift");
+  assert.match(controller, /supportedProjectVersions:\s*Set<Int>\s*=\s*\[1, 2\]/);
+  assert.match(controller, /Self\.supportedProjectVersions\.contains\(version\)/);
+});
+
 test("iOS keeps its poster geometry while shared editor behavior stays mirrored", () => {
   const renderer = fs.readFileSync(path.join(SHARE_BUNDLE, "renderer.js"), "utf8");
   const app = fs.readFileSync(path.join(SHARE_BUNDLE, "app.js"), "utf8");
