@@ -104,8 +104,14 @@ summary:focus-visible,
   height: 100vh;
   height: 100dvh;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
+}
+
+.app > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* ---- 顶栏 ---------------------------------------------------------------- */
@@ -125,7 +131,11 @@ summary:focus-visible,
   background: var(--bg);
 }
 
-.app-title { min-width: 0; }
+.app-title {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+}
 
 .app-title h1 {
   font-size: var(--fs-lg);
@@ -386,6 +396,7 @@ summary:focus-visible,
 }
 
 .track-summary {
+  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1065,6 +1076,9 @@ dialog::backdrop { background: var(--bg); opacity: 0.72; }
   .mobile-tool-dock {
     grid-row: 3;
     z-index: var(--z-dock);
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: var(--s-1);
@@ -1135,7 +1149,22 @@ dialog::backdrop { background: var(--bg); opacity: 0.72; }
     max-block-size: 100%;
   }
 
-  .template-switch { grid-row: 3; padding: var(--s-1) var(--s-4) var(--s-2); }
+  .template-switch {
+    grid-row: 3;
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--s-1);
+    padding: var(--s-1) var(--s-4) var(--s-2);
+  }
+
+  .template-switch button {
+    width: 100%;
+    min-width: 0;
+    padding-right: var(--s-2);
+    padding-left: var(--s-2);
+  }
 
   /* 底部抽屉：顶部大圆角 + 把手条，高约 42%，内部滚动 */
   .editor-grid[data-mobile-tool="lyrics"] > .lyrics-panel {

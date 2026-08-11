@@ -38,6 +38,29 @@ test("standalone ships distinct licensed variable faces for classic and rounded 
   }
 });
 
+test("standalone mobile share editor keeps every root track inside the WebView", () => {
+  const style = fs.readFileSync(path.join(SHARE_BUNDLE, "style.css"), "utf8");
+  const mobile = style.slice(style.indexOf("@media (max-width: 760px)"));
+
+  assert.match(style, /\.app\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s);
+  assert.match(style, /\.app\s*>\s*\*\s*\{[^}]*min-width:\s*0[^}]*max-width:\s*100%/s);
+  assert.match(style, /\.app-title\s*\{[^}]*flex:\s*1\s+1\s+0[^}]*overflow:\s*hidden/s);
+  assert.match(style, /\.track-summary\s*\{[^}]*flex:\s*1\s+1\s+0/s);
+  assert.match(
+    mobile,
+    /\.mobile-tool-dock\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0[^}]*max-width:\s*100%/s,
+  );
+
+  const templateRule = mobile.match(/\.template-switch\s*\{[^}]*\}/s)?.[0] || "";
+  assert.match(templateRule, /display:\s*grid/);
+  assert.match(templateRule, /grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(templateRule, /width:\s*100%/);
+
+  const templateButtonRule = mobile.match(/\.template-switch\s+button\s*\{[^}]*\}/s)?.[0] || "";
+  assert.match(templateButtonRule, /min-width:\s*0/);
+  assert.match(templateButtonRule, /width:\s*100%/);
+});
+
 test("native bridge keeps lyrics documents at 8 MiB while allowing 32 MiB PNG exports", () => {
   const bridge = readSource("LyricsShareEditorBridge.swift");
   const controller = readSource("LyricsShareEditorViewController.swift");
