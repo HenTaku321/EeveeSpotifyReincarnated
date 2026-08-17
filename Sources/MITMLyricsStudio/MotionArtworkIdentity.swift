@@ -16,12 +16,12 @@ struct MotionArtworkIdentity: Equatable {
     }
 
     var key: String {
-        Self.normalized(artist) + "\u{0}" + Self.normalized(album)
+        if let spotifyAlbumID { return "id:\(spotifyAlbumID)" }
+        return "name:" + Self.normalized(artist) + "\u{0}" + Self.normalized(album)
     }
 
     var preferenceToken: String {
-        if let spotifyAlbumID { return "id:\(spotifyAlbumID)" }
-        return "name:\(key)"
+        key
     }
 
     private static func validSpotifyAlbumID(_ value: String) -> String? {

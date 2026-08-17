@@ -55,7 +55,8 @@ test("preferences support a true zero-request global disable and bounded album e
   assert.match(preferences, /maximumDisabledAlbums\s*=\s*512/);
   assert.match(identity, /spotifyAlbumID/);
   assert.match(identity, /"id:\\?\(spotifyAlbumID\)"/);
-  assert.match(identity, /"name:\\?\(key\)"/);
+  assert.match(identity, /return\s+"name:"\s*\+/);
+  assert.match(identity, /var preferenceToken:\s*String\s*\{\s*key\s*\}/s);
   assert.match(coordinator, /guard preferences\.globalEnabled else/);
   assert.match(coordinator, /client\.resolve/);
   assert.ok(
@@ -88,12 +89,14 @@ test("standalone bootstrap does not activate unverified motion artwork hooks", (
 
 test("album-page diagnostics are compile-time gated and read-only", () => {
   const makefile = read("Makefile.standalone");
+  const workflow = read(".github/workflows/build-standalone-lyrics-studio.yml");
   const bootstrap = read("Sources/MITMLyricsStudio/StandaloneBootstrap.x.swift");
   const diagnostics = read("Sources/MITMLyricsStudio/MotionArtworkAlbumPageDiagnostics.swift");
 
-  assert.match(makefile, /MITM_MOTION_ARTWORK_DIAGNOSTICS/);
+  assert.match(makefile, /ifeq\s*\(\$\(MITM_MOTION_ARTWORK_DIAGNOSTICS\),1\)/);
   assert.match(bootstrap, /#if MITM_MOTION_ARTWORK_DIAGNOSTICS/);
   assert.match(diagnostics, /^#if MITM_MOTION_ARTWORK_DIAGNOSTICS/m);
+  assert.match(workflow, /production package unexpectedly contains motion artwork diagnostics/);
   assert.match(diagnostics, /\[MITMMotionProbe\]/);
   assert.match(diagnostics, /UIImageView/);
   assert.match(diagnostics, /class_copyMethodList/);

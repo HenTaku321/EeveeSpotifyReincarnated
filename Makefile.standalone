@@ -9,7 +9,7 @@ TWEAK_NAME = MITMLyricsStudio
 
 MITMLyricsStudio_FILES = $(shell find Sources/EeveeSpotify/ShareEditor -name '*.swift') $(shell find Sources/MITMLyricsStudio -name '*.swift') $(shell find Sources/MITMLyricsStudioC -name '*.m' -o -name '*.c' -o -name '*.mm' -o -name '*.cpp')
 MITMLyricsStudio_SWIFTFLAGS = -ISources/MITMLyricsStudioC/include -Osize -DMITM_LYRICS_STANDALONE
-ifneq ($(MITM_MOTION_ARTWORK_DIAGNOSTICS),)
+ifeq ($(MITM_MOTION_ARTWORK_DIAGNOSTICS),1)
 MITMLyricsStudio_SWIFTFLAGS += -DMITM_MOTION_ARTWORK_DIAGNOSTICS
 endif
 MITMLyricsStudio_FRAMEWORKS = WebKit Photos MediaPlayer ImageIO AVFoundation
