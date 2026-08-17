@@ -8,6 +8,7 @@ struct LyricsShareEditorConfiguration {
     static let shareEditorTranslateEndpointPath = "v1/share-editor/translate"
     static let shareEditorValidateEndpointPath = "v1/share-editor/validate"
     static let segmentsEndpointPath = "v1/segments"
+    static let appleMotionArtworkEndpointPath = "v1/apple-motion-artwork"
     static let sourceLogoEndpointPath = "share-editor/source-logo"
 
     let endpointURL: URL
@@ -17,6 +18,7 @@ struct LyricsShareEditorConfiguration {
     let shareEditorTranslateEndpointURL: URL
     let shareEditorValidateEndpointURL: URL
     let segmentsEndpointURL: URL
+    let appleMotionArtworkEndpointURL: URL
     let sourceLogoURL: URL
     let sourceLogoWhiteURL: URL
     let token: String
@@ -76,6 +78,7 @@ struct LyricsShareEditorConfiguration {
             shareEditorTranslateEndpointURL: baseURL.appendingPathComponent(shareEditorTranslateEndpointPath),
             shareEditorValidateEndpointURL: baseURL.appendingPathComponent(shareEditorValidateEndpointPath),
             segmentsEndpointURL: baseURL.appendingPathComponent(segmentsEndpointPath),
+            appleMotionArtworkEndpointURL: baseURL.appendingPathComponent(appleMotionArtworkEndpointPath),
             sourceLogoURL: sourceLogoURL,
             sourceLogoWhiteURL: sourceLogoWhiteURL,
             token: token

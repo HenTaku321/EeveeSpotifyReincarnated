@@ -5,6 +5,7 @@ repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_dir"
 
 node --test Tools/standalone-package.test.js
+node --test Tools/motion-artwork-source.test.js
 node --test Tools/share-editor-assets.test.js
 node --check layout/Library/Application\ Support/EeveeSpotify.bundle/ShareEditor/app.js
 node --check layout/Library/Application\ Support/EeveeSpotify.bundle/TimelineEditor/app.js
